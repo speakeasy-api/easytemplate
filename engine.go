@@ -26,6 +26,10 @@ func WithScriptDir(scriptDir string) Opt {
 func WithTemplateFuncs(funcs template.FuncMap) Opt {
 	return func(e *Engine) {
 		for k, v := range funcs {
+			if _, ok := e.tmplFuncs[k]; ok {
+				panic(fmt.Errorf("template function %s is a reserved function and can't be overridden", k))
+			}
+
 			e.tmplFuncs[k] = v
 		}
 	}
@@ -34,6 +38,10 @@ func WithTemplateFuncs(funcs template.FuncMap) Opt {
 func WithJSFuncs(funcs map[string]func(call otto.FunctionCall) otto.Value) Opt {
 	return func(e *Engine) {
 		for k, v := range funcs {
+			if _, ok := e.jsFuncs[k]; ok {
+				panic(fmt.Errorf("js function %s is a reserved function and can't be overridden", k))
+			}
+
 			e.jsFuncs[k] = v
 		}
 	}
@@ -50,13 +58,18 @@ type Engine struct {
 
 func New(opts ...Opt) *Engine {
 	e := &Engine{
-		tmplFuncs: template.FuncMap{},
+		// Reserving the names for now
+		tmplFuncs: template.FuncMap{
+			"templateFile":   nil,
+			"templateString": nil,
+		},
+		jsFuncs: map[string]func(call otto.FunctionCall) otto.Value{},
 	}
 
 	e.jsFuncs = map[string]func(call otto.FunctionCall) otto.Value{
 		"require":              e.require,
-		"templateFile":         e.templateFile,
-		"templateString":       e.templateString,
+		"templateFile":         e.templateFileJS,
+		"templateString":       e.templateStringJS,
 		"registerTemplateFunc": e.registerTemplateFunc,
 	}
 
@@ -69,6 +82,8 @@ func New(opts ...Opt) *Engine {
 
 // TODO: return useful errors
 // TODO: Allow setting filesystem for embedded files
+// TODO: test js blocks access to global & local context (and modify local context)
+// TODO: test templateFile and templateString in templates
 func (e *Engine) RunScript(scriptFile string, data any) error {
 	if e.ran {
 		return fmt.Errorf("the templating engine can only be run once, create a new instance to run again")
@@ -82,6 +97,28 @@ func (e *Engine) RunScript(scriptFile string, data any) error {
 			return err
 		}
 	}
+
+	// This need to have the vm passed in so that the functions can be called
+	e.tmplFuncs["templateFile"] = func(vm *otto.Otto) func(string, string, any) (string, error) {
+		return func(templateFile, outFile string, data any) (string, error) {
+			err := e.templateFile(vm, templateFile, outFile, data)
+			if err != nil {
+				return "", err
+			}
+
+			return "", nil
+		}
+	}(vm)
+	e.tmplFuncs["templateString"] = func(vm *otto.Otto) func(string, any) (string, error) {
+		return func(templateFile string, data any) (string, error) {
+			templated, err := e.tmpl(vm, templateFile, data)
+			if err != nil {
+				return "", err
+			}
+
+			return templated, nil
+		}
+	}(vm)
 
 	e.contextData = data
 	if err := vm.Set("context", data); err != nil {
@@ -109,7 +146,10 @@ func (e *Engine) RunTemplate(templateFile string, outFile string, data any) erro
 	vm := otto.New()
 
 	e.contextData = data
-	if err := vm.Set("context", data); err != nil {
+	if err := vm.Set("context", templateContext{
+		Global: data,
+		Local:  data,
+	}); err != nil {
 		return err
 	}
 
