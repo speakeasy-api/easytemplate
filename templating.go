@@ -93,7 +93,7 @@ func (e *Engine) tmpl(vm *otto.Otto, templatePath string, inputData any) (string
 		}
 
 		c := newInlineScriptContext()
-		if err := registerFunc(vm, c.render); err != nil {
+		if err := vm.Set("render", c.render); err != nil {
 			return "", err
 		}
 

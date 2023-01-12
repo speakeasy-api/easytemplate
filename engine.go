@@ -4,9 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"reflect"
-	"runtime"
-	"strings"
 	"text/template"
 
 	"github.com/robertkrimen/otto"
@@ -34,18 +31,40 @@ func WithTemplateFuncs(funcs template.FuncMap) Opt {
 	}
 }
 
+func WithJSFuncs(funcs map[string]func(call otto.FunctionCall) otto.Value) Opt {
+	return func(e *Engine) {
+		for k, v := range funcs {
+			e.jsFuncs[k] = v
+		}
+	}
+}
+
 type Engine struct {
 	templateDir string
 	scriptDir   string
 	ran         bool
 	tmplFuncs   template.FuncMap
+	jsFuncs     map[string]func(call otto.FunctionCall) otto.Value
 	contextData interface{}
 }
 
 func New(opts ...Opt) *Engine {
-	return &Engine{
+	e := &Engine{
 		tmplFuncs: template.FuncMap{},
 	}
+
+	e.jsFuncs = map[string]func(call otto.FunctionCall) otto.Value{
+		"require":              e.require,
+		"templateFile":         e.templateFile,
+		"templateString":       e.templateString,
+		"registerTemplateFunc": e.registerTemplateFunc,
+	}
+
+	for _, opt := range opts {
+		opt(e)
+	}
+
+	return e
 }
 
 // TODO: return useful errors
@@ -58,13 +77,10 @@ func (e *Engine) RunScript(scriptFile string, data any) error {
 
 	vm := otto.New()
 
-	if err := registerFuncs(vm, []func(call otto.FunctionCall) otto.Value{
-		e.require,
-		e.templateFile,
-		e.templateString,
-		e.registerTemplateFunc,
-	}); err != nil {
-		return err
+	for k, v := range e.jsFuncs {
+		if err := vm.Set(k, v); err != nil {
+			return err
+		}
 	}
 
 	e.contextData = data
@@ -92,15 +108,6 @@ func (e *Engine) RunTemplate(templateFile string, outFile string, data any) erro
 
 	vm := otto.New()
 
-	if err := registerFuncs(vm, []func(call otto.FunctionCall) otto.Value{
-		e.require,
-		e.templateFile,
-		e.templateString,
-		e.registerTemplateFunc,
-	}); err != nil {
-		return err
-	}
-
 	e.contextData = data
 	if err := vm.Set("context", data); err != nil {
 		return err
@@ -112,30 +119,6 @@ func (e *Engine) RunTemplate(templateFile string, outFile string, data any) erro
 	}
 
 	if err := os.WriteFile(outFile, []byte(templated), 0o644); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func registerFuncs(vm *otto.Otto, funcs []func(call otto.FunctionCall) otto.Value) error {
-	for _, fn := range funcs {
-		if err := registerFunc(vm, fn); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func registerFunc(vm *otto.Otto, fn func(call otto.FunctionCall) otto.Value) error {
-	name := runtime.FuncForPC(reflect.ValueOf(fn).Pointer()).Name()
-	parts := strings.Split(name, ".")
-
-	funcName := parts[len(parts)-1]
-	funcName = strings.TrimSuffix(funcName, "-fm")
-
-	if err := vm.Set(funcName, fn); err != nil {
 		return err
 	}
 
