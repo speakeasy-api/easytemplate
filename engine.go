@@ -2,6 +2,7 @@ package easytemplate
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path"
 	"text/template"
@@ -10,17 +11,25 @@ import (
 	_ "github.com/robertkrimen/otto/underscore"
 )
 
+type WriteFunc func(string, []byte) error
+
 type Opt func(*Engine)
 
-func WithTemplateDir(templateDir string) Opt {
+func WithBaseDir(baseDir string) Opt {
 	return func(e *Engine) {
-		e.templateDir = templateDir
+		e.baseDir = baseDir
 	}
 }
 
-func WithScriptDir(scriptDir string) Opt {
+func WithReadFileSystem(fs fs.FS) Opt {
 	return func(e *Engine) {
-		e.scriptDir = scriptDir
+		e.readFS = fs
+	}
+}
+
+func WithWriteFunc(writeFunc WriteFunc) Opt {
+	return func(e *Engine) {
+		e.writeFunc = writeFunc
 	}
 }
 
@@ -49,8 +58,9 @@ func WithJSFuncs(funcs map[string]func(call otto.FunctionCall) otto.Value) Opt {
 }
 
 type Engine struct {
-	templateDir string
-	scriptDir   string
+	baseDir     string
+	readFS      fs.FS
+	writeFunc   WriteFunc
 	ran         bool
 	tmplFuncs   template.FuncMap
 	jsFuncs     map[string]func(call otto.FunctionCall) otto.Value
@@ -88,7 +98,12 @@ func (e *Engine) RunScript(scriptFile string, data any) error {
 		return err
 	}
 
-	s, err := vm.Compile(scriptFile, nil)
+	script, err := e.ReadFile(scriptFile)
+	if err != nil {
+		return fmt.Errorf("failed to read script file: %w", err)
+	}
+
+	s, err := vm.Compile("", script)
 	if err != nil {
 		return fmt.Errorf("failed to compile script: %w", err)
 	}
@@ -106,16 +121,16 @@ func (e *Engine) RunTemplate(templateFile string, outFile string, data any) erro
 		return err
 	}
 
-	templated, err := e.tmpl(vm, templateFile, data)
+	return e.templateFile(vm, templateFile, outFile, data)
+}
+
+func (e *Engine) RunTemplateString(templateString string, data any) (string, error) {
+	vm, err := e.init(data)
 	if err != nil {
-		return fmt.Errorf("failed to template file: %w", err)
+		return "", err
 	}
 
-	if err := os.WriteFile(outFile, []byte(templated), 0o644); err != nil {
-		return fmt.Errorf("failed to write file: %w", err)
-	}
-
-	return nil
+	return e.tmpl(vm, templateString, data)
 }
 
 func (e *Engine) init(data any) (*otto.Otto, error) {
@@ -170,11 +185,12 @@ func (e *Engine) require(call otto.FunctionCall) otto.Value {
 
 	scriptPath := call.Argument(0).String()
 
-	if e.scriptDir != "" {
-		scriptPath = path.Join(e.scriptDir, scriptPath)
+	script, err := e.ReadFile(scriptPath)
+	if err != nil {
+		panic(vm.MakeCustomError("requireScript", err.Error()))
 	}
 
-	s, err := vm.Compile(scriptPath, nil)
+	s, err := vm.Compile("", script)
 	if err != nil {
 		panic(vm.MakeCustomError("requireScript", err.Error()))
 	}
@@ -211,4 +227,17 @@ func (e *Engine) registerTemplateFunc(call otto.FunctionCall) otto.Value {
 	}(fn)
 
 	return otto.Value{}
+}
+
+func (e *Engine) ReadFile(file string) ([]byte, error) {
+	filePath := file
+	if e.baseDir != "" {
+		filePath = path.Join(e.baseDir, filePath)
+	}
+
+	if e.readFS != nil {
+		return fs.ReadFile(e.readFS, filePath)
+	} else {
+		return os.ReadFile(filePath)
+	}
 }

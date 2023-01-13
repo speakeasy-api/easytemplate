@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"path"
 	"regexp"
 	"strings"
 	"text/template"
@@ -38,8 +37,14 @@ func (e *Engine) templateFile(vm *otto.Otto, templateFile, outFile string, input
 		return err
 	}
 
-	if err := os.WriteFile(outFile, []byte(output), 0o644); err != nil {
-		return err
+	if e.writeFunc != nil {
+		err = e.writeFunc(outFile, []byte(output))
+	} else {
+		err = os.WriteFile(outFile, []byte(output), 0o644)
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to write file %s: %w", outFile, err)
 	}
 
 	return nil
@@ -101,12 +106,7 @@ func (e *Engine) tmpl(vm *otto.Otto, templatePath string, inputData any) (out st
 		return "", fmt.Errorf("failed to set context: %w", err)
 	}
 
-	tp := templatePath
-	if e.templateDir != "" {
-		tp = path.Join(e.templateDir, templatePath)
-	}
-
-	data, err := os.ReadFile(tp)
+	data, err := e.ReadFile(templatePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to read template file: %w", err)
 	}
