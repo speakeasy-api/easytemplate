@@ -92,6 +92,15 @@ func (e *Engine) tmpl(vm *otto.Otto, templatePath string, inputData any) (out st
 		Local:  inputData,
 	}
 
+	currentContext, err := vm.Get("context")
+	if err != nil {
+		return "", fmt.Errorf("failed to get context: %w", err)
+	}
+
+	if err := vm.Set("context", context); err != nil {
+		return "", fmt.Errorf("failed to set context: %w", err)
+	}
+
 	tp := templatePath
 	if e.templateDir != "" {
 		tp = path.Join(e.templateDir, templatePath)
@@ -112,20 +121,21 @@ func (e *Engine) tmpl(vm *otto.Otto, templatePath string, inputData any) (out st
 			return "", fmt.Errorf("failed to compile inline script: %w", err)
 		}
 
+		currentRender, err := vm.Get("render")
+		if err != nil {
+			return "", fmt.Errorf("failed to get render function: %w", err)
+		}
+
 		c := newInlineScriptContext()
 		if err := vm.Set("render", c.render); err != nil {
 			return "", fmt.Errorf("failed to set render function: %w", err)
-		}
-
-		if err := vm.Set("context", context); err != nil {
-			return "", fmt.Errorf("failed to set context: %w", err)
 		}
 
 		if _, err := vm.Run(s); err != nil {
 			return "", fmt.Errorf("failed to run inline script: %w", err)
 		}
 
-		if err := vm.Set("render", otto.UndefinedValue()); err != nil {
+		if err := vm.Set("render", currentRender); err != nil {
 			return "", fmt.Errorf("failed to unset render function: %w", err)
 		}
 
@@ -135,6 +145,7 @@ func (e *Engine) tmpl(vm *otto.Otto, templatePath string, inputData any) (out st
 		return "", err
 	}
 
+	// Get the local context back as it might have been modified by the inline script
 	contextVal, err := vm.Get("context")
 	if err != nil {
 		return "", fmt.Errorf("failed to get local context: %w", err)
@@ -149,6 +160,8 @@ func (e *Engine) tmpl(vm *otto.Otto, templatePath string, inputData any) (out st
 	if err != nil {
 		return "", fmt.Errorf("failed to export local context: %w", err)
 	}
+
+	// Use the local context from the inline script
 	context.Local = localContext
 
 	t, err := template.New(templatePath).Funcs(e.tmplFuncs).Parse(evaluated)
@@ -160,6 +173,11 @@ func (e *Engine) tmpl(vm *otto.Otto, templatePath string, inputData any) (out st
 
 	if err := t.Execute(&buf, context); err != nil {
 		return "", fmt.Errorf("failed to execute template: %w", err)
+	}
+
+	// Reset the context back to the previous one
+	if err := vm.Set("context", currentContext); err != nil {
+		return "", fmt.Errorf("failed to reset context: %w", err)
 	}
 
 	return buf.String(), nil

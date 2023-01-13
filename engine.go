@@ -7,6 +7,7 @@ import (
 	"text/template"
 
 	"github.com/robertkrimen/otto"
+	_ "github.com/robertkrimen/otto/underscore"
 )
 
 type Opt func(*Engine)
@@ -80,13 +81,46 @@ func New(opts ...Opt) *Engine {
 	return e
 }
 
-// TODO: return useful errors
 // TODO: Allow setting filesystem for embedded files
-// TODO: test js blocks access to global & local context (and modify local context)
-// TODO: test templateFile and templateString in templates
 func (e *Engine) RunScript(scriptFile string, data any) error {
+	vm, err := e.init(data)
+	if err != nil {
+		return err
+	}
+
+	s, err := vm.Compile(scriptFile, nil)
+	if err != nil {
+		return fmt.Errorf("failed to compile script: %w", err)
+	}
+
+	if _, err := vm.Run(s); err != nil {
+		return fmt.Errorf("failed to run script: %w", err)
+	}
+
+	return nil
+}
+
+func (e *Engine) RunTemplate(templateFile string, outFile string, data any) error {
+	vm, err := e.init(data)
+	if err != nil {
+		return err
+	}
+
+	templated, err := e.tmpl(vm, templateFile, data)
+	if err != nil {
+		return fmt.Errorf("failed to template file: %w", err)
+	}
+
+	if err := os.WriteFile(outFile, []byte(templated), 0o644); err != nil {
+		return fmt.Errorf("failed to write file: %w", err)
+	}
+
+	return nil
+}
+
+func (e *Engine) init(data any) (*otto.Otto, error) {
 	if e.ran {
-		return fmt.Errorf("the templating engine can only be run once, create a new instance to run again")
+		return nil, fmt.Errorf("the templating engine can only be run once, create a new instance to run again")
 	}
 	e.ran = true
 
@@ -94,7 +128,7 @@ func (e *Engine) RunScript(scriptFile string, data any) error {
 
 	for k, v := range e.jsFuncs {
 		if err := vm.Set(k, v); err != nil {
-			return err
+			return nil, fmt.Errorf("failed to set js function %s: %w", k, err)
 		}
 	}
 
@@ -121,48 +155,14 @@ func (e *Engine) RunScript(scriptFile string, data any) error {
 	}(vm)
 
 	e.contextData = data
-	if err := vm.Set("context", data); err != nil {
-		return err
-	}
-
-	s, err := vm.Compile(scriptFile, nil)
-	if err != nil {
-		return err
-	}
-
-	if _, err := vm.Run(s); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (e *Engine) RunTemplate(templateFile string, outFile string, data any) error {
-	if e.ran {
-		return fmt.Errorf("the templating engine can only be run once, create a new instance to run again")
-	}
-	e.ran = true
-
-	vm := otto.New()
-
-	e.contextData = data
 	if err := vm.Set("context", templateContext{
 		Global: data,
 		Local:  data,
 	}); err != nil {
-		return err
+		return nil, fmt.Errorf("failed to set context: %w", err)
 	}
 
-	templated, err := e.tmpl(vm, templateFile, data)
-	if err != nil {
-		return err
-	}
-
-	if err := os.WriteFile(outFile, []byte(templated), 0o644); err != nil {
-		return err
-	}
-
-	return nil
+	return vm, nil
 }
 
 func (e *Engine) require(call otto.FunctionCall) otto.Value {
