@@ -41,7 +41,7 @@ func WithReadFileSystem(fs fs.FS) Opt {
 }
 
 // WithWriteFunc sets the write function to use for writing files. This is useful for writing to locations other than disk.
-func WithWriteFunc(writeFunc template.WriteFunc) Opt {
+func WithWriteFunc(writeFunc func(string, []byte) error) Opt {
 	return func(e *Engine) {
 		e.templator.WriteFunc = writeFunc
 	}
