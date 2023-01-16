@@ -22,7 +22,7 @@ jobs:
       - name: Configure git for private modules
         env:
           GIT_AUTH_TOKEN: ${{ secrets.BOT_REPO_TOKEN }}
-        run: git config --global url."https://speakeasybot:${GITHUB_TOKEN }@github.com".insteadOf "https://github.com"
+        run: git config --global url."https://speakeasybot:${GITHUB_TOKEN}@github.com".insteadOf "https://github.com"
 
       - name: Checkout the code
         uses: actions/checkout@v2
