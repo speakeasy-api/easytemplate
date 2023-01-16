@@ -1,0 +1,5 @@
+global
+from test.stmpl
+js output
+another line
+from test2.stmpl sjs block

@@ -1,0 +1,1 @@
+{{ templateString "templates/test4.stmpl" .Local }}

@@ -1,0 +1,11 @@
+{{.Global.Test}}
+{{.Local.Added}}
+```sjs
+var local = context.Local;
+context.Local = { Added: local };
+render("js output");
+render("another line");
+
+var templated = templateString("templates/test3.stmpl", {Test: "from test2.stmpl sjs block"});
+render(templated);
+sjs```

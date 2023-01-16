@@ -1,8 +1,10 @@
-package easytemplate
+// Package utils contains utility functions.
+package utils
 
 import "regexp"
 
-func replaceAllStringSubmatchFunc(re *regexp.Regexp, str string, repl func([]string) (string, error)) (string, error) {
+// ReplaceAllStringSubmatchFunc replaces all submatches with the result of the repl function.
+func ReplaceAllStringSubmatchFunc(re *regexp.Regexp, str string, repl func([]string) (string, error)) (string, error) {
 	result := ""
 	lastIndex := 0
 

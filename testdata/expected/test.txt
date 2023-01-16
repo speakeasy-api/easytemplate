@@ -1,0 +1,4 @@
+global
+from test.js
+
+3
