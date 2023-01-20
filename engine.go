@@ -187,6 +187,7 @@ func (e *Engine) RunTemplateString(templateFile string, data any) (string, error
 	return e.templator.TemplateString(vm, templateFile, data)
 }
 
+//nolint:funlen
 func (e *Engine) init(data any) (*jsVM, error) {
 	if e.ran {
 		return nil, ErrAlreadyRan
