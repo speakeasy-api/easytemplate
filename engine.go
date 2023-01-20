@@ -5,23 +5,32 @@
 package easytemplate
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path"
 
-	"github.com/robertkrimen/otto"
 	// provides underscore support for js interpreted by the engine.
-	_ "github.com/robertkrimen/otto/underscore"
+	"github.com/dop251/goja"
 	"github.com/speakeasy-api/easytemplate/internal/template"
+	"github.com/speakeasy-api/easytemplate/internal/underscore"
 )
 
 var (
 	// ErrAlreadyRan is returned when the engine has already been ran, and can't be ran again. In order to run the engine again, a new engine must be created.
-	ErrAlreadyRan = fmt.Errorf("engine has already been ran")
+	ErrAlreadyRan = errors.New("engine has already been ran")
 	// ErrReserved is returned when a template or js function is reserved and can't be overridden.
-	ErrReserved = fmt.Errorf("function is a reserved function and can't be overridden")
+	ErrReserved = errors.New("function is a reserved function and can't be overridden")
+	// ErrInvalidArg is returned when an invalid argument is passed to a function.
+	ErrInvalidArg = errors.New("invalid argument")
 )
+
+// CallContext is the context that is passed to go functions when called from js.
+type CallContext struct {
+	goja.FunctionCall
+	VM *jsVM
+}
 
 // Opt is a function that configures the Engine.
 type Opt func(*Engine)
@@ -61,7 +70,7 @@ func WithTemplateFuncs(funcs map[string]any) Opt {
 }
 
 // WithJSFuncs allows for providing additional functions available to javascript in the engine.
-func WithJSFuncs(funcs map[string]func(call otto.FunctionCall) otto.Value) Opt {
+func WithJSFuncs(funcs map[string]func(call CallContext) goja.Value) Opt {
 	return func(e *Engine) {
 		for k, v := range funcs {
 			if _, ok := e.jsFuncs[k]; ok {
@@ -81,7 +90,21 @@ type Engine struct {
 	templator *template.Templator
 
 	ran     bool
-	jsFuncs map[string]func(call otto.FunctionCall) otto.Value
+	jsFuncs map[string]func(call CallContext) goja.Value
+}
+
+type jsVM struct {
+	*goja.Runtime
+}
+
+var _ template.VM = &jsVM{}
+
+func (v *jsVM) GetObject(val goja.Value) *goja.Object {
+	return val.ToObject(v.Runtime)
+}
+
+func (v *jsVM) Compile(name string, src string, strict bool) (*goja.Program, error) {
+	return goja.Compile(name, src, strict)
 }
 
 // New creates a new Engine with the provided options.
@@ -99,12 +122,12 @@ func New(opts ...Opt) *Engine {
 
 	e := &Engine{
 		templator: t,
-		jsFuncs:   map[string]func(call otto.FunctionCall) otto.Value{},
+		jsFuncs:   map[string]func(call CallContext) goja.Value{},
 	}
 
 	t.ReadFunc = e.readFile
 
-	e.jsFuncs = map[string]func(call otto.FunctionCall) otto.Value{
+	e.jsFuncs = map[string]func(call CallContext) goja.Value{
 		"require":              e.require,
 		"templateFile":         e.templateFileJS,
 		"templateString":       e.templateStringJS,
@@ -130,12 +153,12 @@ func (e *Engine) RunScript(scriptFile string, data any) error {
 		return fmt.Errorf("failed to read script file: %w", err)
 	}
 
-	s, err := vm.Compile("", script)
+	s, err := vm.Compile(scriptFile, string(script), false)
 	if err != nil {
 		return fmt.Errorf("failed to compile script: %w", err)
 	}
 
-	if _, err := vm.Run(s); err != nil {
+	if _, err := vm.RunProgram(s); err != nil {
 		return fmt.Errorf("failed to run script: %w", err)
 	}
 
@@ -162,22 +185,37 @@ func (e *Engine) RunTemplateString(templateFile string, data any) (string, error
 	return e.templator.TemplateString(vm, templateFile, data)
 }
 
-func (e *Engine) init(data any) (*otto.Otto, error) {
+func (e *Engine) init(data any) (*jsVM, error) {
 	if e.ran {
 		return nil, ErrAlreadyRan
 	}
 	e.ran = true
 
-	vm := otto.New()
+	g := goja.New()
+	_, err := g.RunString(underscore.JS)
+	if err != nil {
+		return nil, fmt.Errorf("failed to init underscore: %w", err)
+	}
+
+	vm := &jsVM{g}
 
 	for k, v := range e.jsFuncs {
-		if err := vm.Set(k, v); err != nil {
+		wrappedFn := func(v func(call CallContext) goja.Value) func(call goja.FunctionCall) goja.Value {
+			return func(call goja.FunctionCall) goja.Value {
+				return v(CallContext{
+					FunctionCall: call,
+					VM:           vm,
+				})
+			}
+		}(v)
+
+		if err := vm.Set(k, wrappedFn); err != nil {
 			return nil, fmt.Errorf("failed to set js function %s: %w", k, err)
 		}
 	}
 
 	// This need to have the vm passed in so that the functions can be called
-	e.templator.TmplFuncs["templateFile"] = func(vm *otto.Otto) func(string, string, any) (string, error) {
+	e.templator.TmplFuncs["templateFile"] = func(vm *jsVM) func(string, string, any) (string, error) {
 		return func(templateFile, outFile string, data any) (string, error) {
 			err := e.templator.TemplateFile(vm, templateFile, outFile, data)
 			if err != nil {
@@ -187,7 +225,7 @@ func (e *Engine) init(data any) (*otto.Otto, error) {
 			return "", nil
 		}
 	}(vm)
-	e.templator.TmplFuncs["templateString"] = func(vm *otto.Otto) func(string, any) (string, error) {
+	e.templator.TmplFuncs["templateString"] = func(vm *jsVM) func(string, any) (string, error) {
 		return func(templateFile string, data any) (string, error) {
 			templated, err := e.templator.TemplateString(vm, templateFile, data)
 			if err != nil {
@@ -209,53 +247,56 @@ func (e *Engine) init(data any) (*otto.Otto, error) {
 	return vm, nil
 }
 
-func (e *Engine) require(call otto.FunctionCall) otto.Value {
-	vm := call.Otto
+func (e *Engine) require(call CallContext) goja.Value {
+	vm := call.VM
 
 	scriptPath := call.Argument(0).String()
 
 	script, err := e.readFile(scriptPath)
 	if err != nil {
-		panic(vm.MakeCustomError("requireScript", err.Error()))
+		panic(vm.NewGoError(err))
 	}
 
-	s, err := vm.Compile("", script)
+	s, err := vm.Compile(scriptPath, string(script), false)
 	if err != nil {
-		panic(vm.MakeCustomError("requireScript", err.Error()))
+		panic(vm.NewGoError(err))
 	}
 
-	if _, err := vm.Run(s); err != nil {
-		panic(vm.MakeCustomError("requireScript", err.Error()))
+	if _, err := vm.RunProgram(s); err != nil {
+		panic(vm.NewGoError(err))
 	}
 
-	return otto.Value{}
+	return goja.Undefined()
 }
 
-func (e *Engine) registerTemplateFunc(call otto.FunctionCall) otto.Value {
+func (e *Engine) registerTemplateFunc(call CallContext) goja.Value {
 	name := call.Argument(0).String()
-	fn := call.Argument(1)
-
-	if _, ok := e.templator.TmplFuncs[name]; ok {
-		panic(call.Otto.MakeCustomError("registerTemplateFunc", fmt.Sprintf("template function %s already exists", name)))
+	fn, ok := goja.AssertFunction(call.Argument(1))
+	if !ok {
+		panic(call.VM.NewGoError(fmt.Errorf("%w: second argument must be a function", ErrInvalidArg)))
 	}
 
-	e.templator.TmplFuncs[name] = func(fn otto.Value) func(args ...interface{}) any {
+	if _, ok := e.templator.TmplFuncs[name]; ok {
+		panic(call.VM.NewGoError(fmt.Errorf("%w: template function %s already exists", ErrReserved, name)))
+	}
+
+	e.templator.TmplFuncs[name] = func(fn goja.Callable) func(args ...interface{}) any {
 		return func(args ...interface{}) any {
-			val, err := fn.Call(fn, args...)
+			callableArgs := make([]goja.Value, len(args))
+			for i, arg := range args {
+				callableArgs[i] = call.VM.ToValue(arg)
+			}
+
+			val, err := fn(goja.Undefined(), callableArgs...)
 			if err != nil {
 				panic(err)
 			}
 
-			v, err := val.Export()
-			if err != nil {
-				panic(err)
-			}
-
-			return v
+			return val.Export()
 		}
 	}(fn)
 
-	return otto.Value{}
+	return goja.Undefined()
 }
 
 func (e *Engine) readFile(file string) ([]byte, error) {

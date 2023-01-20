@@ -1,15 +1,13 @@
-//go:generate mockgen -destination=./mocks/template_mock.go -package mocks github.com/speakeasy-api/easytemplate/internal/template VM
 package template_test
 
 import (
 	"testing"
 
+	"github.com/dop251/goja"
 	"github.com/golang/mock/gomock"
-	"github.com/robertkrimen/otto"
 	"github.com/speakeasy-api/easytemplate/internal/template"
 	"github.com/speakeasy-api/easytemplate/internal/template/mocks"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestTemplator_TemplateFile_Success(t *testing.T) {
@@ -52,14 +50,14 @@ func TestTemplator_TemplateFile_Success(t *testing.T) {
 				Global: tt.fields.contextData,
 				Local:  tt.args.inputData,
 			}
-			o := otto.New()
-			contextVal, err := o.ToValue(context)
-			require.NoError(t, err)
+			o := goja.New()
+			contextVal := o.ToValue(context)
 
-			vm.EXPECT().Get("context").Return(otto.Value{}, nil).Times(1)
+			vm.EXPECT().Get("context").Return(goja.Undefined()).Times(1)
 			vm.EXPECT().Set("context", context).Return(nil).Times(1)
-			vm.EXPECT().Get("context").Return(contextVal, nil).Times(1)
-			vm.EXPECT().Set("context", otto.Value{}).Return(nil).Times(1)
+			vm.EXPECT().Get("context").Return(contextVal).Times(1)
+			vm.EXPECT().GetObject(contextVal).Return(contextVal.ToObject(o)).Times(1)
+			vm.EXPECT().Set("context", goja.Undefined()).Return(nil).Times(1)
 
 			tr := &template.Templator{
 				ReadFunc: func(s string) ([]byte, error) {
@@ -73,7 +71,7 @@ func TestTemplator_TemplateFile_Success(t *testing.T) {
 				},
 				ContextData: tt.fields.contextData,
 			}
-			err = tr.TemplateFile(vm, tt.args.templatePath, tt.args.outFile, tt.args.inputData)
+			err := tr.TemplateFile(vm, tt.args.templatePath, tt.args.outFile, tt.args.inputData)
 			assert.NoError(t, err)
 		})
 	}
@@ -148,24 +146,24 @@ func TestTemplator_TemplateString_Success(t *testing.T) {
 				Global: tt.fields.contextData,
 				Local:  tt.args.inputData,
 			}
-			o := otto.New()
-			contextVal, err := o.ToValue(context)
-			require.NoError(t, err)
+			o := goja.New()
+			contextVal := o.ToValue(context)
 
-			vm.EXPECT().Get("context").Return(otto.Value{}, nil).Times(1)
+			vm.EXPECT().Get("context").Return(goja.Undefined()).Times(1)
 			vm.EXPECT().Set("context", context).Return(nil).Times(1)
 
 			if tt.fields.includedJS != "" {
-				vm.EXPECT().Compile("", tt.fields.includedJS).Return(&otto.Script{}, nil).Times(1)
+				vm.EXPECT().Compile("inline", tt.fields.includedJS, false).Return(&goja.Program{}, nil).Times(1)
 
-				vm.EXPECT().Get("render").Return(otto.Value{}, nil).Times(1)
+				vm.EXPECT().Get("render").Return(goja.Undefined()).Times(1)
 				vm.EXPECT().Set("render", gomock.Any()).Return(nil).Times(1)
-				vm.EXPECT().Run(&otto.Script{}).Return(otto.Value{}, nil).Times(1)
-				vm.EXPECT().Set("render", otto.Value{}).Return(nil).Times(1)
+				vm.EXPECT().RunProgram(&goja.Program{}).Return(goja.Undefined(), nil).Times(1)
+				vm.EXPECT().Set("render", goja.Undefined()).Return(nil).Times(1)
 			}
 
-			vm.EXPECT().Get("context").Return(contextVal, nil).Times(1)
-			vm.EXPECT().Set("context", otto.Value{}).Return(nil).Times(1)
+			vm.EXPECT().Get("context").Return(contextVal).Times(1)
+			vm.EXPECT().GetObject(contextVal).Return(contextVal.ToObject(o)).Times(1)
+			vm.EXPECT().Set("context", goja.Undefined()).Return(nil).Times(1)
 
 			tr := &template.Templator{
 				ReadFunc: func(s string) ([]byte, error) {

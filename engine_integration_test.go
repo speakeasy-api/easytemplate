@@ -1,10 +1,11 @@
 package easytemplate_test
 
 import (
+	"fmt"
 	"os"
 	"testing"
 
-	_ "github.com/robertkrimen/otto/underscore"
+	"github.com/dop251/goja"
 	"github.com/speakeasy-api/easytemplate"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -33,6 +34,19 @@ func TestEngine_RunScript_Success(t *testing.T) {
 			delete(expectedFiles, outFile)
 
 			return nil
+		}),
+		easytemplate.WithJSFuncs(map[string]func(call easytemplate.CallContext) goja.Value{
+			"multiply": func(call easytemplate.CallContext) goja.Value {
+				a := call.Argument(0).ToInteger()
+				b := call.Argument(1).ToInteger()
+
+				return call.VM.ToValue(a * b)
+			},
+		}),
+		easytemplate.WithTemplateFuncs(map[string]any{
+			"toFloatWithPrecision": func(i int64, precision int) string {
+				return fmt.Sprintf("%.*f", precision, float64(i))
+			},
 		}),
 	)
 	err = e.RunScript("scripts/test.js", map[string]interface{}{

@@ -7,8 +7,8 @@ package mocks
 import (
 	reflect "reflect"
 
+	goja "github.com/dop251/goja"
 	gomock "github.com/golang/mock/gomock"
-	otto "github.com/robertkrimen/otto"
 )
 
 // MockVM is a mock of VM interface.
@@ -35,27 +35,26 @@ func (m *MockVM) EXPECT() *MockVMMockRecorder {
 }
 
 // Compile mocks base method.
-func (m *MockVM) Compile(arg0 string, arg1 interface{}) (*otto.Script, error) {
+func (m *MockVM) Compile(arg0, arg1 string, arg2 bool) (*goja.Program, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Compile", arg0, arg1)
-	ret0, _ := ret[0].(*otto.Script)
+	ret := m.ctrl.Call(m, "Compile", arg0, arg1, arg2)
+	ret0, _ := ret[0].(*goja.Program)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Compile indicates an expected call of Compile.
-func (mr *MockVMMockRecorder) Compile(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockVMMockRecorder) Compile(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Compile", reflect.TypeOf((*MockVM)(nil).Compile), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Compile", reflect.TypeOf((*MockVM)(nil).Compile), arg0, arg1, arg2)
 }
 
 // Get mocks base method.
-func (m *MockVM) Get(arg0 string) (otto.Value, error) {
+func (m *MockVM) Get(arg0 string) goja.Value {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Get", arg0)
-	ret0, _ := ret[0].(otto.Value)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret0, _ := ret[0].(goja.Value)
+	return ret0
 }
 
 // Get indicates an expected call of Get.
@@ -64,19 +63,33 @@ func (mr *MockVMMockRecorder) Get(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockVM)(nil).Get), arg0)
 }
 
-// Run mocks base method.
-func (m *MockVM) Run(arg0 interface{}) (otto.Value, error) {
+// GetObject mocks base method.
+func (m *MockVM) GetObject(arg0 goja.Value) *goja.Object {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Run", arg0)
-	ret0, _ := ret[0].(otto.Value)
+	ret := m.ctrl.Call(m, "GetObject", arg0)
+	ret0, _ := ret[0].(*goja.Object)
+	return ret0
+}
+
+// GetObject indicates an expected call of GetObject.
+func (mr *MockVMMockRecorder) GetObject(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetObject", reflect.TypeOf((*MockVM)(nil).GetObject), arg0)
+}
+
+// RunProgram mocks base method.
+func (m *MockVM) RunProgram(arg0 *goja.Program) (goja.Value, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RunProgram", arg0)
+	ret0, _ := ret[0].(goja.Value)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// Run indicates an expected call of Run.
-func (mr *MockVMMockRecorder) Run(arg0 interface{}) *gomock.Call {
+// RunProgram indicates an expected call of RunProgram.
+func (mr *MockVMMockRecorder) RunProgram(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Run", reflect.TypeOf((*MockVM)(nil).Run), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunProgram", reflect.TypeOf((*MockVM)(nil).RunProgram), arg0)
 }
 
 // Set mocks base method.

@@ -1,36 +1,27 @@
 package easytemplate
 
-import "github.com/robertkrimen/otto"
+import (
+	"github.com/dop251/goja"
+)
 
 //nolint:gomnd
-func (e *Engine) templateFileJS(call otto.FunctionCall) otto.Value {
-	inputData, err := call.Argument(2).Export()
-	if err != nil {
-		panic(call.Otto.MakeCustomError("templateFile", err.Error()))
+func (e *Engine) templateFileJS(call CallContext) goja.Value {
+	inputData := call.Argument(2).Export()
+
+	if err := e.templator.TemplateFile(call.VM, call.Argument(0).String(), call.Argument(1).String(), inputData); err != nil {
+		panic(call.VM.NewGoError(err))
 	}
 
-	if err := e.templator.TemplateFile(call.Otto, call.Argument(0).String(), call.Argument(1).String(), inputData); err != nil {
-		panic(call.Otto.MakeCustomError("templateFile", err.Error()))
-	}
-
-	return otto.Value{}
+	return goja.Undefined()
 }
 
-func (e *Engine) templateStringJS(call otto.FunctionCall) otto.Value {
-	inputData, err := call.Argument(1).Export()
+func (e *Engine) templateStringJS(call CallContext) goja.Value {
+	inputData := call.Argument(1).Export()
+
+	output, err := e.templator.TemplateString(call.VM, call.Argument(0).String(), inputData)
 	if err != nil {
-		panic(call.Otto.MakeCustomError("templateString", err.Error()))
+		panic(call.VM.NewGoError(err))
 	}
 
-	output, err := e.templator.TemplateString(call.Otto, call.Argument(0).String(), inputData)
-	if err != nil {
-		panic(call.Otto.MakeCustomError("templateString", err.Error()))
-	}
-
-	val, err := otto.ToValue(output)
-	if err != nil {
-		panic(call.Otto.MakeCustomError("templateString", err.Error()))
-	}
-
-	return val
+	return call.VM.ToValue(output)
 }

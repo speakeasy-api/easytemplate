@@ -10,7 +10,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/robertkrimen/otto"
+	"github.com/dop251/goja"
 	"github.com/speakeasy-api/easytemplate/internal/utils"
 )
 
@@ -31,10 +31,11 @@ type Context struct {
 
 // VM represents a virtual machine that can be used to run js.
 type VM interface {
-	Get(name string) (otto.Value, error)
+	Get(name string) goja.Value
 	Set(name string, value interface{}) error
-	Compile(filename string, src interface{}) (*otto.Script, error)
-	Run(src interface{}) (otto.Value, error)
+	Compile(name string, src string, strict bool) (*goja.Program, error)
+	RunProgram(p *goja.Program) (result goja.Value, err error)
+	GetObject(val goja.Value) *goja.Object
 }
 
 // Templator extends the go text/template package to allow for sjs snippets.
@@ -69,10 +70,10 @@ func newInlineScriptContext() *inlineScriptContext {
 	}
 }
 
-func (c *inlineScriptContext) render(call otto.FunctionCall) otto.Value {
+func (c *inlineScriptContext) render(call goja.FunctionCall) goja.Value {
 	c.renderedContent = append(c.renderedContent, call.Argument(0).String())
 
-	return otto.Value{}
+	return goja.Undefined()
 }
 
 // TemplateString will template a string and return the output.
@@ -88,10 +89,7 @@ func (t *Templator) TemplateString(vm VM, templatePath string, inputData any) (o
 		Local:  inputData,
 	}
 
-	currentContext, err := vm.Get("context")
-	if err != nil {
-		return "", fmt.Errorf("failed to get context: %w", err)
-	}
+	currentContext := vm.Get("context")
 
 	if err := vm.Set("context", context); err != nil {
 		return "", fmt.Errorf("failed to set context: %w", err)
@@ -115,11 +113,7 @@ func (t *Templator) TemplateString(vm VM, templatePath string, inputData any) (o
 	}
 
 	// Use the local context from the inline script
-	localContext, err := getLocalContext(vm)
-	if err != nil {
-		return "", err
-	}
-	context.Local = localContext
+	context.Local = getLocalContext(vm)
 
 	out, err = t.execTemplate(templatePath, evaluated, context)
 	if err != nil {
@@ -135,22 +129,19 @@ func (t *Templator) TemplateString(vm VM, templatePath string, inputData any) (o
 }
 
 func (t *Templator) execSJSBlock(vm VM, js string) (string, error) {
-	s, err := vm.Compile("", js)
+	s, err := vm.Compile("inline", js, false)
 	if err != nil {
 		return "", fmt.Errorf("failed to compile inline script: %w", err)
 	}
 
-	currentRender, err := vm.Get("render")
-	if err != nil {
-		return "", fmt.Errorf("failed to get render function: %w", err)
-	}
+	currentRender := vm.Get("render")
 
 	c := newInlineScriptContext()
 	if err := vm.Set("render", c.render); err != nil {
 		return "", fmt.Errorf("failed to set render function: %w", err)
 	}
 
-	if _, err := vm.Run(s); err != nil {
+	if _, err := vm.RunProgram(s); err != nil {
 		return "", fmt.Errorf("failed to run inline script: %w", err)
 	}
 
@@ -161,24 +152,15 @@ func (t *Templator) execSJSBlock(vm VM, js string) (string, error) {
 	return strings.Join(c.renderedContent, "\n"), nil
 }
 
-func getLocalContext(vm VM) (any, error) {
+func getLocalContext(vm VM) any {
 	// Get the local context back as it might have been modified by the inline script
-	contextVal, err := vm.Get("context")
-	if err != nil {
-		return nil, fmt.Errorf("failed to get context: %w", err)
-	}
+	contextVal := vm.Get("context")
 
-	localContextVal, err := contextVal.Object().Get("Local")
-	if err != nil {
-		return nil, fmt.Errorf("failed to get Local attribute: %w", err)
-	}
+	localContextVal := vm.GetObject(contextVal).Get("Local")
 
-	localContext, err := localContextVal.Export()
-	if err != nil {
-		return nil, fmt.Errorf("failed to export local context: %w", err)
-	}
+	localContext := localContextVal.Export()
 
-	return localContext, nil
+	return localContext
 }
 
 func (t *Templator) execTemplate(name string, tmplContent string, data any) (string, error) {

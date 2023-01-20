@@ -1,4 +1,4 @@
 {{.Global.Test}}
 {{.Local.Test}}
 {{templateFile "templates/test2.stmpl" "test2.txt" "from test.stmpl"}}
-{{.Local.Value}}
+{{toFloatWithPrecision .Local.Value 3}}

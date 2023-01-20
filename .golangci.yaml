@@ -68,5 +68,12 @@ linters-settings:
     checks: ["all", "-ST1000", "-ST1003"]
   cyclop:
     max-complexity: 15
+  ireturn:
+    allow:
+      - anon
+      - error
+      - empty
+      - stdlib
+      - "github.com/dop251/goja.Value"
 run:
   go: "1.19"
