@@ -1,5 +1,7 @@
 require("scripts/include.js");
 
+console.log("Hello easytemplate!");
+
 let values = [1, 2, 3, 4, 5];
 
 let reduced = _.reduce(values, (sum, value) => add(sum, value), 0);

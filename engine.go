@@ -13,6 +13,8 @@ import (
 
 	// provides underscore support for js interpreted by the engine.
 	"github.com/dop251/goja"
+	"github.com/dop251/goja_nodejs/console"
+	"github.com/dop251/goja_nodejs/require"
 	"github.com/speakeasy-api/easytemplate/internal/template"
 	"github.com/speakeasy-api/easytemplate/internal/underscore"
 )
@@ -196,6 +198,9 @@ func (e *Engine) init(data any) (*jsVM, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to init underscore: %w", err)
 	}
+
+	new(require.Registry).Enable(g)
+	console.Enable(g)
 
 	vm := &jsVM{g}
 

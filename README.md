@@ -9,7 +9,7 @@
 The module includes a number of features on top of the standard [text/template](https://pkg.go.dev/text/template) package, including:
 
 * [x] [Support for JavaScript snippets in templates](#using-javascript).
-  * [x] ES5 Support provided by [otto](https://github.com/robertkrimen/otto).
+  * [x] ES5 Support provided by [goja](https://github.com/dop251/goja).
   * [x] Built-in support for [underscore.js](http://underscorejs.org/).
   * [x] Import JavaScripts scripts from other files and inline JavaScript snippets.
   * [x] Modify the templating context from within JavaScript.
@@ -25,7 +25,7 @@ go get github.com/speakeasy-api/easytemplate
 
 ## How does it work?
 
-Using [otto](https://github.com/robertkrimen/otto), `easytemplate` adds a superset of functionality to Go's [text/template](https://pkg.go.dev/text/template) package, with minimal dependencies and no bulky external JS runtime.
+Using [goja](https://github.com/dop251/goja), `easytemplate` adds a superset of functionality to Go's [text/template](https://pkg.go.dev/text/template) package, with minimal dependencies and no bulky external JS runtime.
 
 `easytemplate` allows you to control templating directly from scripts or other templates which among other things, allows you to:
 
@@ -220,10 +220,10 @@ You can also register JavaScript functions from Go. For example:
 
 ```go
 engine := easytemplate.New(
-  easytemplate.WithJSFuncs(map[string]func(call otto.FunctionCall) otto.Value{
-    "hello": func(call otto.FunctionCall) otto.Value {
-      name, _ := call.Argument(0).ToString()
-      return call.Otto.ToValue("Hello " + name + "!")
+  easytemplate.WithJSFuncs(map[string]func(call easytemplate.CallContext) goja.Value{
+    "hello": func(call easytemplate.CallContext) goja.Value {
+      name := call.Argument(0).String()
+      return call.VM.ToValue("Hello " + name + "!")
     }
   }),
 )
