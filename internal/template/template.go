@@ -58,6 +58,7 @@ type Templator struct {
 	globalComputed goja.Value
 }
 
+// SetContextData allows the setting of global context for templating.
 func (t *Templator) SetContextData(contextData any, globalComputed goja.Value) {
 	t.contextData = contextData
 	t.globalComputed = globalComputed
@@ -124,23 +125,7 @@ func (t *Templator) TemplateString(vm VM, templatePath string, inputData any) (o
 		return "", fmt.Errorf("failed to read template file: %w", err)
 	}
 
-	replacedLines := 0
-
-	evaluated, err := utils.ReplaceAllStringSubmatchFunc(sjsRegex, string(data), func(match []string) (string, error) {
-		const expectedMatchLen = 3
-		if len(match) != expectedMatchLen {
-			return match[0], nil
-		}
-
-		output, err := t.execSJSBlock(vm, match[2], templatePath)
-		if err != nil {
-			return "", err
-		}
-
-		replacedLines += strings.Count(match[1], "\n") - strings.Count(output, "\n")
-
-		return output, nil
-	})
+	evaluated, replacedLines, err := t.evaluateInlineScripts(vm, templatePath, string(data))
 	if err != nil {
 		return "", err
 	}
@@ -166,6 +151,31 @@ func (t *Templator) TemplateString(vm VM, templatePath string, inputData any) (o
 	}
 
 	return out, nil
+}
+
+func (t *Templator) evaluateInlineScripts(vm VM, templatePath, content string) (string, int, error) {
+	replacedLines := 0
+
+	evaluated, err := utils.ReplaceAllStringSubmatchFunc(sjsRegex, content, func(match []string) (string, error) {
+		const expectedMatchLen = 3
+		if len(match) != expectedMatchLen {
+			return match[0], nil
+		}
+
+		output, err := t.execSJSBlock(vm, match[2], templatePath)
+		if err != nil {
+			return "", err
+		}
+
+		replacedLines += strings.Count(match[1], "\n") - strings.Count(output, "\n")
+
+		return output, nil
+	})
+	if err != nil {
+		return "", 0, err
+	}
+
+	return evaluated, replacedLines, nil
 }
 
 func (t *Templator) execSJSBlock(vm VM, js, templatePath string) (string, error) {
