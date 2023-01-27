@@ -11,6 +11,8 @@ github.com/dop251/goja v0.0.0-20230119130012-17fd568758fe h1:PsLX9tWRxptk4COd23D
 github.com/dop251/goja v0.0.0-20230119130012-17fd568758fe/go.mod h1:yRkwfj0CBpOGre+TwBsqPV0IH0Pk73e4PXJOeNDboGs=
 github.com/dop251/goja v0.0.0-20230122160437-8f6e415ca41e h1:cRvfEaPr/1fBqodPgxYeOfbHfKJPhuooehw37v9gxps=
 github.com/dop251/goja v0.0.0-20230122160437-8f6e415ca41e/go.mod h1:yRkwfj0CBpOGre+TwBsqPV0IH0Pk73e4PXJOeNDboGs=
+github.com/dop251/goja v0.0.0-20230127185032-9577c35d40f7 h1:61vEgjydRQqsV0y4DNtRq208KGWj2H6bV34TWGGAlKY=
+github.com/dop251/goja v0.0.0-20230127185032-9577c35d40f7/go.mod h1:yRkwfj0CBpOGre+TwBsqPV0IH0Pk73e4PXJOeNDboGs=
 github.com/dop251/goja_nodejs v0.0.0-20210225215109-d91c329300e7/go.mod h1:hn7BA7c8pLvoGndExHudxTDKZ84Pyvv+90pbBjbTz0Y=
 github.com/dop251/goja_nodejs v0.0.0-20211022123610-8dd9abb0616d/go.mod h1:DngW8aVqWbuLRMHItjPUyqdj+HWPvnQe8V8y1nDpIbM=
 github.com/dop251/goja_nodejs v0.0.0-20221211191749-434192f0843e h1:DJ5cKH4HUYevCd09vMIbwc8U02eBKLFR2q1O1hSAJcY=
