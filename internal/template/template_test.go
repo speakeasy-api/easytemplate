@@ -47,12 +47,15 @@ func TestTemplator_TemplateFile_Success(t *testing.T) {
 			vm := mocks.NewMockVM(ctrl)
 
 			context := &template.Context{
-				Global: tt.fields.contextData,
-				Local:  tt.args.inputData,
+				Global:         tt.fields.contextData,
+				GlobalComputed: goja.Undefined(),
+				Local:          tt.args.inputData,
+				LocalComputed:  goja.Undefined(),
 			}
 			o := goja.New()
 			contextVal := o.ToValue(context)
 
+			vm.EXPECT().RunString(`createComputedContextObject();`).Return(goja.Undefined(), nil).Times(1)
 			vm.EXPECT().Get("context").Return(goja.Undefined()).Times(1)
 			vm.EXPECT().Set("context", context).Return(nil).Times(1)
 			vm.EXPECT().Get("context").Return(contextVal).Times(1)
@@ -69,8 +72,8 @@ func TestTemplator_TemplateFile_Success(t *testing.T) {
 					assert.Equal(t, tt.wantOut, string(b))
 					return nil
 				},
-				ContextData: tt.fields.contextData,
 			}
+			tr.SetContextData(tt.fields.contextData, goja.Undefined())
 			err := tr.TemplateFile(vm, tt.args.templatePath, tt.args.outFile, tt.args.inputData)
 			assert.NoError(t, err)
 		})
@@ -143,17 +146,20 @@ func TestTemplator_TemplateString_Success(t *testing.T) {
 			vm := mocks.NewMockVM(ctrl)
 
 			context := &template.Context{
-				Global: tt.fields.contextData,
-				Local:  tt.args.inputData,
+				Global:         tt.fields.contextData,
+				GlobalComputed: goja.Undefined(),
+				Local:          tt.args.inputData,
+				LocalComputed:  goja.Undefined(),
 			}
 			o := goja.New()
 			contextVal := o.ToValue(context)
 
+			vm.EXPECT().RunString(`createComputedContextObject();`).Return(goja.Undefined(), nil).Times(1)
 			vm.EXPECT().Get("context").Return(goja.Undefined()).Times(1)
 			vm.EXPECT().Set("context", context).Return(nil).Times(1)
 
 			if tt.fields.includedJS != "" {
-				vm.EXPECT().Compile("inline", tt.fields.includedJS, false).Return(&goja.Program{}, nil).Times(1)
+				vm.EXPECT().Compile("inline", tt.fields.includedJS, true).Return(&goja.Program{}, nil).Times(1)
 
 				vm.EXPECT().Get("render").Return(goja.Undefined()).Times(1)
 				vm.EXPECT().Set("render", gomock.Any()).Return(nil).Times(1)
@@ -170,9 +176,9 @@ func TestTemplator_TemplateString_Success(t *testing.T) {
 					assert.Equal(t, tt.args.templatePath, s)
 					return []byte(tt.fields.template), nil
 				},
-				ContextData: tt.fields.contextData,
-				TmplFuncs:   tt.fields.tmplFuncs,
+				TmplFuncs: tt.fields.tmplFuncs,
 			}
+			tr.SetContextData(tt.fields.contextData, goja.Undefined())
 			out, err := tr.TemplateString(vm, tt.args.templatePath, tt.args.inputData)
 			assert.NoError(t, err)
 			assert.Equal(t, tt.wantOut, out)

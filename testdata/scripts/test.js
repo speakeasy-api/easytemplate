@@ -1,5 +1,9 @@
 require("scripts/include.js");
 
+_.each(["a", "b", "c"], (v) => {
+  console.log(v);
+});
+
 console.log("Hello easytemplate!");
 
 let values = [1, 2, 3, 4, 5];

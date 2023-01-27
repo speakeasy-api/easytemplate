@@ -158,13 +158,14 @@ The `sjs` snippet can be used anywhere within your template (including multiple 
 Context data that is available to the templates is also available to JavasScript. Snippets and Files imported with a template file will have access to the same context data as that template file. For example
 
 ```gotemplate
-```sj
+```sjs
 console.log(context.Global); // The context data provided by the initial call to the templating engine.
 console.log(context.Local); // The context data provided to the template file.
 sjs```
 ```
 
-The `Local` context provided can be modified from within JavaScript and will be available to the template file when it is rendered.
+The context object also contains `LocalComputed` and `GlobalComputed` objects that allow you to store computed values that can be later.
+`LocalComputed` is only available to the current template file and `GlobalComputed` is available to all templates and scripts, from the point it was set.
 
 ### Using the `render` function
 
@@ -246,6 +247,18 @@ The [underscore.js](http://underscorejs.org/) library is included by default and
 ```js
 _.each([1, 2, 3], console.log);
 ```
+
+### Importing External Javascript Libraries
+
+Using `WithJSFiles` you can import external JavaScript libraries into the global scope. For example:
+
+```go
+engine := easytemplate.New(
+  easytemplate.WithJSFiles("faker.min.js", "<CONTENT OF FILE HERE>"),
+)
+```
+
+The imported code will be available in the global scope.
 
 ### Available Engine functions to JS
 

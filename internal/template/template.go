@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -21,29 +22,45 @@ type (
 	ReadFunc func(string) ([]byte, error)
 )
 
-var sjsRegex = regexp.MustCompile("(?ms)(^```sjs\\s+(.*?)^sjs```)")
+var sjsRegex = regexp.MustCompile("(?ms)(```sjs\\s*\\n*(.*?)sjs```)")
 
 // Context is the context that is passed templates or js.
 type Context struct {
-	Global any
-	Local  any
+	Global         any
+	Local          any
+	GlobalComputed goja.Value
+	LocalComputed  goja.Value
+}
+
+type tmplContext struct {
+	Global         any
+	Local          any
+	GlobalComputed any
+	LocalComputed  any
 }
 
 // VM represents a virtual machine that can be used to run js.
 type VM interface {
 	Get(name string) goja.Value
-	Set(name string, value interface{}) error
+	Set(name string, value any) error
 	Compile(name string, src string, strict bool) (*goja.Program, error)
 	RunProgram(p *goja.Program) (result goja.Value, err error)
+	RunString(script string) (result goja.Value, err error)
 	GetObject(val goja.Value) *goja.Object
 }
 
 // Templator extends the go text/template package to allow for sjs snippets.
 type Templator struct {
-	WriteFunc   WriteFunc
-	ReadFunc    ReadFunc
-	ContextData interface{}
-	TmplFuncs   map[string]any
+	WriteFunc      WriteFunc
+	ReadFunc       ReadFunc
+	TmplFuncs      map[string]any
+	contextData    any
+	globalComputed goja.Value
+}
+
+func (t *Templator) SetContextData(contextData any, globalComputed goja.Value) {
+	t.contextData = contextData
+	t.globalComputed = globalComputed
 }
 
 // TemplateFile will template a file and write the output to outFile.
@@ -84,9 +101,16 @@ func (t *Templator) TemplateString(vm VM, templatePath string, inputData any) (o
 		}
 	}()
 
+	localComputed, err := vm.RunString(`createComputedContextObject();`)
+	if err != nil {
+		return "", fmt.Errorf("failed to create local computed context: %w", err)
+	}
+
 	context := &Context{
-		Global: t.ContextData,
-		Local:  inputData,
+		Global:         t.contextData,
+		GlobalComputed: t.globalComputed,
+		Local:          inputData,
+		LocalComputed:  localComputed,
 	}
 
 	currentContext := vm.Get("context")
@@ -100,22 +124,38 @@ func (t *Templator) TemplateString(vm VM, templatePath string, inputData any) (o
 		return "", fmt.Errorf("failed to read template file: %w", err)
 	}
 
+	replacedLines := 0
+
 	evaluated, err := utils.ReplaceAllStringSubmatchFunc(sjsRegex, string(data), func(match []string) (string, error) {
 		const expectedMatchLen = 3
 		if len(match) != expectedMatchLen {
 			return match[0], nil
 		}
 
-		return t.execSJSBlock(vm, match[2])
+		output, err := t.execSJSBlock(vm, match[2], templatePath)
+		if err != nil {
+			return "", err
+		}
+
+		replacedLines += strings.Count(match[1], "\n") - strings.Count(output, "\n")
+
+		return output, nil
 	})
 	if err != nil {
 		return "", err
 	}
 
-	// Use the local context from the inline script
-	context.Local = getLocalContext(vm)
+	// Get the computed context back as it might have been modified by the inline script
+	localComputed = getComputedContext(vm)
 
-	out, err = t.execTemplate(templatePath, evaluated, context)
+	tmplCtx := &tmplContext{
+		Global:         context.Global,
+		Local:          context.Local,
+		GlobalComputed: context.GlobalComputed.Export(),
+		LocalComputed:  localComputed.Export(),
+	}
+
+	out, err = t.execTemplate(templatePath, evaluated, tmplCtx, replacedLines)
 	if err != nil {
 		return "", err
 	}
@@ -128,8 +168,8 @@ func (t *Templator) TemplateString(vm VM, templatePath string, inputData any) (o
 	return out, nil
 }
 
-func (t *Templator) execSJSBlock(vm VM, js string) (string, error) {
-	s, err := vm.Compile("inline", js, false)
+func (t *Templator) execSJSBlock(vm VM, js, templatePath string) (string, error) {
+	s, err := vm.Compile("inline", js, true)
 	if err != nil {
 		return "", fmt.Errorf("failed to compile inline script: %w", err)
 	}
@@ -142,7 +182,7 @@ func (t *Templator) execSJSBlock(vm VM, js string) (string, error) {
 	}
 
 	if _, err := vm.RunProgram(s); err != nil {
-		return "", fmt.Errorf("failed to run inline script: %w", err)
+		return "", fmt.Errorf("failed to run inline script in %s:\n%s\n%w", templatePath, js, err)
 	}
 
 	if err := vm.Set("render", currentRender); err != nil {
@@ -152,18 +192,16 @@ func (t *Templator) execSJSBlock(vm VM, js string) (string, error) {
 	return strings.Join(c.renderedContent, "\n"), nil
 }
 
-func getLocalContext(vm VM) any {
+func getComputedContext(vm VM) goja.Value {
 	// Get the local context back as it might have been modified by the inline script
 	contextVal := vm.Get("context")
 
-	localContextVal := vm.GetObject(contextVal).Get("Local")
+	computedVal := vm.GetObject(contextVal).Get("LocalComputed")
 
-	localContext := localContextVal.Export()
-
-	return localContext
+	return computedVal
 }
 
-func (t *Templator) execTemplate(name string, tmplContent string, data any) (string, error) {
+func (t *Templator) execTemplate(name string, tmplContent string, data any, replacedLines int) (string, error) {
 	tmp, err := template.New(name).Funcs(t.TmplFuncs).Parse(tmplContent)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)
@@ -172,8 +210,32 @@ func (t *Templator) execTemplate(name string, tmplContent string, data any) (str
 	var buf bytes.Buffer
 
 	if err := tmp.Execute(&buf, data); err != nil {
+		err = adjustLineNumber(name, err, replacedLines)
 		return "", fmt.Errorf("failed to execute template: %w", err)
 	}
 
 	return buf.String(), nil
+}
+
+func adjustLineNumber(name string, err error, replacedLines int) error {
+	lineNumRegex, rErr := regexp.Compile(fmt.Sprintf(`template: %s:(\d+)`, regexp.QuoteMeta(name)))
+	if rErr == nil {
+		errMsg, rErr := utils.ReplaceAllStringSubmatchFunc(lineNumRegex, err.Error(), func(matches []string) (string, error) {
+			if len(matches) != 2 { //nolint:gomnd
+				return matches[0], nil
+			}
+
+			currentLineNumber, err := strconv.Atoi(matches[1])
+			if err != nil {
+				return matches[0], nil //nolint:nilerr
+			}
+
+			return strings.Replace(matches[0], matches[1], fmt.Sprintf("%d", currentLineNumber+replacedLines), 1), nil
+		})
+		if rErr == nil {
+			err = fmt.Errorf(errMsg)
+		}
+	}
+
+	return err
 }

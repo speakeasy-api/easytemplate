@@ -1,1 +1,7 @@
 {{.Local.Test}}
+```sjs
+require("scripts/logeach.js");
+_.each(["z", "x", "y"], (v) => {
+  console.log(v);
+});
+sjs```

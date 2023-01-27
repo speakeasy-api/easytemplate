@@ -1,4 +1,4 @@
-// Package underscore provides the underscore-min.js file.
+// Package underscore provides the underscore-min.js file. Downloaded from https://underscorejs.org/underscore-min.js
 package underscore
 
 import (

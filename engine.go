@@ -84,6 +84,13 @@ func WithJSFuncs(funcs map[string]func(call CallContext) goja.Value) Opt {
 	}
 }
 
+// WithJSFiles allows for providing additional javascript files to be loaded into the engine.
+func WithJSFiles(files map[string]string) Opt {
+	return func(e *Engine) {
+		e.jsFiles = files
+	}
+}
+
 // Engine provides the templating engine.
 type Engine struct {
 	baseDir string
@@ -93,6 +100,7 @@ type Engine struct {
 
 	ran     bool
 	jsFuncs map[string]func(call CallContext) goja.Value
+	jsFiles map[string]string
 }
 
 type jsVM struct {
@@ -125,6 +133,7 @@ func New(opts ...Opt) *Engine {
 	e := &Engine{
 		templator: t,
 		jsFuncs:   map[string]func(call CallContext) goja.Value{},
+		jsFiles:   map[string]string{},
 	}
 
 	t.ReadFunc = e.readFile
@@ -155,7 +164,7 @@ func (e *Engine) RunScript(scriptFile string, data any) error {
 		return fmt.Errorf("failed to read script file: %w", err)
 	}
 
-	s, err := vm.Compile(scriptFile, string(script), false)
+	s, err := vm.Compile(scriptFile, string(script), true)
 	if err != nil {
 		return fmt.Errorf("failed to compile script: %w", err)
 	}
@@ -200,6 +209,13 @@ func (e *Engine) init(data any) (*jsVM, error) {
 		return nil, fmt.Errorf("failed to init underscore: %w", err)
 	}
 
+	for name, content := range e.jsFiles {
+		_, err := g.RunString(content)
+		if err != nil {
+			return nil, fmt.Errorf("failed to init %s: %w", name, err)
+		}
+	}
+
 	new(require.Registry).Enable(g)
 	console.Enable(g)
 
@@ -242,10 +258,21 @@ func (e *Engine) init(data any) (*jsVM, error) {
 		}
 	}(vm)
 
-	e.templator.ContextData = data
+	if _, err := vm.RunString(`function createComputedContextObject() { return {}; }`); err != nil {
+		return nil, fmt.Errorf("failed to init createComputedContextObject: %w", err)
+	}
+
+	globalComputed, err := vm.RunString(`createComputedContextObject();`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to init globalComputed: %w", err)
+	}
+
+	e.templator.SetContextData(data, globalComputed)
 	if err := vm.Set("context", &template.Context{
-		Global: data,
-		Local:  data,
+		Global:         data,
+		GlobalComputed: globalComputed,
+		Local:          data,
+		LocalComputed:  globalComputed,
 	}); err != nil {
 		return nil, fmt.Errorf("failed to set context: %w", err)
 	}
@@ -263,7 +290,7 @@ func (e *Engine) require(call CallContext) goja.Value {
 		panic(vm.NewGoError(err))
 	}
 
-	s, err := vm.Compile(scriptPath, string(script), false)
+	s, err := vm.Compile(scriptPath, string(script), true)
 	if err != nil {
 		panic(vm.NewGoError(err))
 	}
