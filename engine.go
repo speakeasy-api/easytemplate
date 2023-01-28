@@ -16,7 +16,7 @@ import (
 	"github.com/dop251/goja_nodejs/console"
 	"github.com/dop251/goja_nodejs/require"
 	"github.com/speakeasy-api/easytemplate/internal/template"
-	"github.com/speakeasy-api/easytemplate/internal/underscore"
+	"github.com/speakeasy-api/easytemplate/pkg/underscore"
 )
 
 var (
