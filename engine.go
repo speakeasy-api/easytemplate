@@ -16,6 +16,7 @@ import (
 	"github.com/dop251/goja_nodejs/console"
 	"github.com/dop251/goja_nodejs/require"
 	"github.com/speakeasy-api/easytemplate/internal/template"
+	"github.com/speakeasy-api/easytemplate/internal/utils"
 	"github.com/speakeasy-api/easytemplate/pkg/underscore"
 )
 
@@ -37,10 +38,10 @@ type CallContext struct {
 // Opt is a function that configures the Engine.
 type Opt func(*Engine)
 
-// WithBaseDir sets the base directory for finding scripts and templates. Allowing for relative paths.
-func WithBaseDir(baseDir string) Opt {
+// WithSearchLocations allows for providing additional locations to search for templates and scripts.
+func WithSearchLocations(searchLocations []string) Opt {
 	return func(e *Engine) {
-		e.baseDir = baseDir
+		e.searchLocations = searchLocations
 	}
 }
 
@@ -93,8 +94,8 @@ func WithJSFiles(files map[string]string) Opt {
 
 // Engine provides the templating engine.
 type Engine struct {
-	baseDir string
-	readFS  fs.FS
+	searchLocations []string
+	readFS          fs.FS
 
 	templator *template.Templator
 
@@ -122,8 +123,9 @@ func New(opts ...Opt) *Engine {
 	t := &template.Templator{
 		// Reserving the names for now
 		TmplFuncs: map[string]any{
-			"templateFile":   nil,
-			"templateString": nil,
+			"templateFile":        nil,
+			"templateString":      nil,
+			"templateStringInput": nil,
 		},
 		WriteFunc: func(s string, b []byte) error {
 			return os.WriteFile(s, b, os.ModePerm)
@@ -142,6 +144,7 @@ func New(opts ...Opt) *Engine {
 		"require":              e.require,
 		"templateFile":         e.templateFileJS,
 		"templateString":       e.templateStringJS,
+		"templateStringInput":  e.templateStringInputJS,
 		"registerTemplateFunc": e.registerTemplateFunc,
 	}
 
@@ -166,11 +169,11 @@ func (e *Engine) RunScript(scriptFile string, data any) error {
 
 	s, err := vm.Compile(scriptFile, string(script), true)
 	if err != nil {
-		return fmt.Errorf("failed to compile script: %w", err)
+		return utils.HandleJSError("failed to compile script", err)
 	}
 
 	if _, err := vm.RunProgram(s); err != nil {
-		return fmt.Errorf("failed to run script: %w", err)
+		return utils.HandleJSError("failed to run script", err)
 	}
 
 	return nil
@@ -196,6 +199,16 @@ func (e *Engine) RunTemplateString(templateFile string, data any) (string, error
 	return e.templator.TemplateString(vm, templateFile, data)
 }
 
+// RunTemplateStringInput runs the provided input template string, with the provided data, starting the template engine and templating the provided template, returning the rendered result.
+func (e *Engine) RunTemplateStringInput(name, template string, data any) (string, error) {
+	vm, err := e.init(data)
+	if err != nil {
+		return "", err
+	}
+
+	return e.templator.TemplateStringInput(vm, name, template, data)
+}
+
 //nolint:funlen
 func (e *Engine) init(data any) (*jsVM, error) {
 	if e.ran {
@@ -206,13 +219,13 @@ func (e *Engine) init(data any) (*jsVM, error) {
 	g := goja.New()
 	_, err := g.RunString(underscore.JS)
 	if err != nil {
-		return nil, fmt.Errorf("failed to init underscore: %w", err)
+		return nil, utils.HandleJSError("failed to init underscore", err)
 	}
 
 	for name, content := range e.jsFiles {
 		_, err := g.RunString(content)
 		if err != nil {
-			return nil, fmt.Errorf("failed to init %s: %w", name, err)
+			return nil, utils.HandleJSError(fmt.Sprintf("failed to init %s", name), err)
 		}
 	}
 
@@ -257,14 +270,24 @@ func (e *Engine) init(data any) (*jsVM, error) {
 			return templated, nil
 		}
 	}(vm)
+	e.templator.TmplFuncs["templateStringInput"] = func(vm *jsVM) func(string, string, any) (string, error) {
+		return func(name, template string, data any) (string, error) {
+			templated, err := e.templator.TemplateStringInput(vm, name, template, data)
+			if err != nil {
+				return "", err
+			}
+
+			return templated, nil
+		}
+	}(vm)
 
 	if _, err := vm.RunString(`function createComputedContextObject() { return {}; }`); err != nil {
-		return nil, fmt.Errorf("failed to init createComputedContextObject: %w", err)
+		return nil, utils.HandleJSError("failed to init createComputedContextObject", err)
 	}
 
 	globalComputed, err := vm.RunString(`createComputedContextObject();`)
 	if err != nil {
-		return nil, fmt.Errorf("failed to init globalComputed: %w", err)
+		return nil, utils.HandleJSError("failed to init globalComputed", err)
 	}
 
 	e.templator.SetContextData(data, globalComputed)
@@ -334,8 +357,21 @@ func (e *Engine) registerTemplateFunc(call CallContext) goja.Value {
 
 func (e *Engine) readFile(file string) ([]byte, error) {
 	filePath := file
-	if e.baseDir != "" {
-		filePath = path.Join(e.baseDir, filePath)
+
+	for _, dir := range e.searchLocations {
+		searchPath := path.Join(dir, filePath)
+
+		if e.readFS != nil {
+			if _, err := fs.Stat(e.readFS, searchPath); err == nil {
+				filePath = searchPath
+				break
+			}
+		} else {
+			if _, err := os.Stat(searchPath); err == nil {
+				filePath = searchPath
+				break
+			}
+		}
 	}
 
 	if e.readFS != nil {

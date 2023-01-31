@@ -1,7 +1,13 @@
 // Package utils contains utility functions.
 package utils
 
-import "regexp"
+import (
+	"errors"
+	"fmt"
+	"regexp"
+
+	"github.com/dop251/goja"
+)
 
 // ReplaceAllStringSubmatchFunc replaces all submatches with the result of the repl function.
 func ReplaceAllStringSubmatchFunc(re *regexp.Regexp, str string, repl func([]string) (string, error)) (string, error) {
@@ -28,4 +34,13 @@ func ReplaceAllStringSubmatchFunc(re *regexp.Regexp, str string, repl func([]str
 	}
 
 	return result + str[lastIndex:], nil
+}
+
+func HandleJSError(msg string, err error) error {
+	var jsErr *goja.Exception
+	if !errors.As(err, &jsErr) {
+		return fmt.Errorf("%s: %w", msg, err)
+	}
+
+	return fmt.Errorf("%s: %s", msg, jsErr.String())
 }

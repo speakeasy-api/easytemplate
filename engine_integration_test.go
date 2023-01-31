@@ -25,7 +25,7 @@ func TestEngine_RunScript_Success(t *testing.T) {
 	}
 
 	e := easytemplate.New(
-		easytemplate.WithBaseDir("./testdata"),
+		easytemplate.WithSearchLocations([]string{"./testdata"}),
 		easytemplate.WithWriteFunc(func(outFile string, data []byte) error {
 			expectedData, ok := expectedFiles[outFile]
 			assert.True(t, ok, "unexpected file written: %s", outFile)
