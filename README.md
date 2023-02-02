@@ -4,7 +4,7 @@
 
 **easytemplate** is Go's [text/template](https://pkg.go.dev/text/template) with 🦸 super powers 🦸. It is a templating engine that allows you to use Go's [text/template](https://pkg.go.dev/text/template) syntax, but with the ability to use JavaScript snippets to manipulate data, control templating and run more complex logic while templating.
 
-**easytemplate** powers [Speakeasy's](https://speakeasy-api.dev) SDK Generation product and is used by thousands of developers to generate SDKs for their APIs.
+**easytemplate** powers [Speakeasy's](https://speakeasy-api.dev) SDK Generation product, which is used by thousands of developers to generate SDKs for their APIs.
 
 The module includes a number of features on top of the standard [text/template](https://pkg.go.dev/text/template) package, including:
 
@@ -139,11 +139,11 @@ engine := easytemplate.New(
 
 ## Using JavaScript
 
-Javascript can be used either via inline snippets or by importing scripts from other files.
+JavaScript can be used either via inline snippets or by importing scripts from other files.
 
 If using the `RunScript` method on the engine your entry point will be a JavaScript file where you can setup your environment and start calling template functions.
 
-Alternatively, you can use javascript by embedding snippets within your templates using the `sjs` tag like so:
+Alternatively, you can use JavaScript by embedding snippets within your templates using the `sjs` tag like so:
 
 ```gotemplate
 ```sjs
@@ -155,7 +155,7 @@ The `sjs` snippet can be used anywhere within your template (including multiple 
 
 ### Context data
 
-Context data that is available to the templates is also available to JavasScript. Snippets and Files imported with a template file will have access to the same context data as that template file. For example
+Context data that is available to the templates is also available to JavaScript. Snippets and Files imported with a template file will have access to the same context data as that template file. For example
 
 ```gotemplate
 ```sjs
@@ -169,7 +169,7 @@ The context object also contains `LocalComputed` and `GlobalComputed` objects th
 
 ### Using the `render` function
 
-The `render` function allows the javascript snippets to render output into the template file before it is templated allowing for dynamic templating. For example:
+The `render` function allows the JavaScript snippets to render output into the template file before it is templated allowing for dynamic templating. For example:
 
 ```gotemplate
 {{ .Local.firstName }} ```sjs
