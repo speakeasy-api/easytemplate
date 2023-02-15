@@ -1,0 +1,5 @@
+```sjs
+require("scripts/typescript.ts");
+render(addOne(0));
+render(addTwo(0));
+sjs```
