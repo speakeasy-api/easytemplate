@@ -28,6 +28,8 @@ var (
 	ErrReserved = errors.New("function is a reserved function and can't be overridden")
 	// ErrInvalidArg is returned when an invalid argument is passed to a function.
 	ErrInvalidArg = errors.New("invalid argument")
+	// ErrCompilation is returned when a template fails to compile.
+	ErrCompilation = errors.New("template compilation failed")
 )
 
 // CallContext is the context that is passed to go functions when called from js.
@@ -126,7 +128,7 @@ func (v *jsVM) Compile(name string, src string, strict bool) (*goja.Program, err
 		for _, errMsg := range result.Errors {
 			msg += fmt.Sprintf("%v @ %v %v:%v;", errMsg.Text, name, errMsg.Location.Line, errMsg.Location.Column)
 		}
-		return nil, errors.New(msg)
+		return nil, fmt.Errorf("%w: %s", ErrCompilation, msg)
 	}
 	return goja.Compile(name, string(result.Code), strict)
 }
