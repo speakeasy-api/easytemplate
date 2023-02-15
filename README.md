@@ -153,6 +153,10 @@ sjs```
 
 The `sjs` snippet can be used anywhere within your template (including multiple snippets) and will be replaced with any "rendered" output returned when using the `render` function.
 
+Naive transformation of typescript code is supported through [esbuild](https://esbuild.github.io/api/#transformation). This means that you can directly import typescript code and use type annotations in place of any JavaScript. However, be aware:
+ * EasyTemplate will not perform type checking itself. Type annotations are transformed into commented out code.  
+ * Scripts/Snippets are not bundled, but executed as a single module on the global scope. This means no `import` statements are possible. [Instead, the global `require` function](#importing-javascript) is available to directly execute JS/TS code.  
+
 ### Context data
 
 Context data that is available to the templates is also available to JavaScript. Snippets and Files imported with a template file will have access to the same context data as that template file. For example
