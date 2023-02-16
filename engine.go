@@ -15,6 +15,7 @@ import (
 	"github.com/dop251/goja"
 	"github.com/dop251/goja_nodejs/console"
 	"github.com/dop251/goja_nodejs/require"
+	esbuild "github.com/evanw/esbuild/pkg/api"
 	"github.com/speakeasy-api/easytemplate/internal/template"
 	"github.com/speakeasy-api/easytemplate/internal/utils"
 	"github.com/speakeasy-api/easytemplate/pkg/underscore"
@@ -27,6 +28,8 @@ var (
 	ErrReserved = errors.New("function is a reserved function and can't be overridden")
 	// ErrInvalidArg is returned when an invalid argument is passed to a function.
 	ErrInvalidArg = errors.New("invalid argument")
+	// ErrCompilation is returned when a template fails to compile.
+	ErrCompilation = errors.New("template compilation failed")
 )
 
 // CallContext is the context that is passed to go functions when called from js.
@@ -115,7 +118,19 @@ func (v *jsVM) GetObject(val goja.Value) *goja.Object {
 }
 
 func (v *jsVM) Compile(name string, src string, strict bool) (*goja.Program, error) {
-	return goja.Compile(name, src, strict)
+	// transform src with esbuild -- this ensures we handle typescript
+	result := esbuild.Transform(src, esbuild.TransformOptions{
+		Target: esbuild.ES2015,
+		Loader: esbuild.LoaderTS,
+	})
+	if len(result.Errors) > 0 {
+		msg := ""
+		for _, errMsg := range result.Errors {
+			msg += fmt.Sprintf("%v @ %v %v:%v;", errMsg.Text, name, errMsg.Location.Line, errMsg.Location.Column)
+		}
+		return nil, fmt.Errorf("%w: %s", ErrCompilation, msg)
+	}
+	return goja.Compile(name, string(result.Code), strict)
 }
 
 // New creates a new Engine with the provided options.
@@ -309,6 +324,12 @@ func (e *Engine) require(call CallContext) goja.Value {
 	scriptPath := call.Argument(0).String()
 
 	script, err := e.readFile(scriptPath)
+	if err != nil {
+		currentCallStack := vm.CaptureCallStack(0, nil)
+		currentScript := currentCallStack[1].SrcName()
+		relativePath := path.Join(path.Dir(currentScript), scriptPath)
+		script, err = e.readFile(relativePath)
+	}
 	if err != nil {
 		panic(vm.NewGoError(err))
 	}

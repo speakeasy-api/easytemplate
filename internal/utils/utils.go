@@ -36,6 +36,7 @@ func ReplaceAllStringSubmatchFunc(re *regexp.Regexp, str string, repl func([]str
 	return result + str[lastIndex:], nil
 }
 
+// HandleJSError wraps a JS error in a Go error.
 func HandleJSError(msg string, err error) error {
 	var jsErr *goja.Exception
 	if !errors.As(err, &jsErr) {

@@ -14,3 +14,4 @@ templateFile("templates/test.stmpl", "test.txt", {
   Test: "from test.js",
   Value: multiply(add(reduced, 2), 2),
 });
+templateFile("templates/test5.stmpl", "test5.txt", {});
