@@ -3,7 +3,7 @@ module github.com/speakeasy-api/easytemplate
 go 1.19
 
 require (
-	github.com/dop251/goja v0.0.0-20230128084908-78b980256d04
+	github.com/dop251/goja v0.0.0-20230216112155-746f7ebdc514
 	github.com/dop251/goja_nodejs v0.0.0-20221211191749-434192f0843e
 	github.com/evanw/esbuild v0.17.8
 	github.com/golang/mock v1.6.0
