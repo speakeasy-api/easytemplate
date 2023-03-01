@@ -37,7 +37,7 @@ Using [goja](https://github.com/dop251/goja), `easytemplate` adds a superset of 
 
 See the [documentation](https://pkg.go.dev/github.com/speakeasy-api/easytemplate) for more information and instructions on how to use the package.
 
-## Basic Usage
+## Basic Usage Example
 
 `main.go`
 
@@ -67,18 +67,46 @@ func main() {
 `main.js`
 
 ```js
+// From our main entrypoint, we can render a template file, the last argument is the data to pass to the template.
 templateFile("tmpl.stmpl", "out.txt", { name: "John" });
 ```
 
 `tmpl.stmpl`
 
-```gotemplate
+In the below template we are using the `name` variable from the data we passed to the template from main.js.
+
+We then also have an embedded JavaScript block that both renders output (the sjs block is replaced in the final output by any rendered text or just removed if nothing is rendered) and sets up additional data available to the template that it then uses to render another template inline.
+
+```go
 Hello {{ .Local.name }}!
 
 ```sjs
-console.log("Hello from JavaScript!");
-render("This text is rendered from JavaScript!");
+console.log("Hello from JavaScript!"); // Logs message to stdout useful for debugging.
+
+render("This text is rendered from JavaScript!"); 
+
+context.LocalComputed.SomeComputedText = "This text is computed from JavaScript!";
 sjs```
+
+{{ templateString "tmpl2.stmpl" .LocalComputed }}
+```
+
+`tmpl2.stmpl`
+
+```go
+And then we are showing some computed text from JavaScript:
+{{ .SomeComputedText }}
+```
+
+The rendered file `out.txt`
+
+```text
+Hello John!
+
+This text is rendered from JavaScript!
+
+And then we are showing some computed text from JavaScript:
+This text is computed from JavaScript!
 ```
 
 ## Templating
