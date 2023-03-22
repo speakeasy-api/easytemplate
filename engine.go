@@ -11,14 +11,10 @@ import (
 	"os"
 	"path"
 
-	// provides underscore support for js interpreted by the engine.
 	"github.com/dop251/goja"
-	"github.com/dop251/goja_nodejs/console"
-	"github.com/dop251/goja_nodejs/require"
-	esbuild "github.com/evanw/esbuild/pkg/api"
 	"github.com/speakeasy-api/easytemplate/internal/template"
 	"github.com/speakeasy-api/easytemplate/internal/utils"
-	"github.com/speakeasy-api/easytemplate/pkg/underscore"
+	"github.com/speakeasy-api/easytemplate/internal/vm"
 )
 
 var (
@@ -28,14 +24,14 @@ var (
 	ErrReserved = errors.New("function is a reserved function and can't be overridden")
 	// ErrInvalidArg is returned when an invalid argument is passed to a function.
 	ErrInvalidArg = errors.New("invalid argument")
-	// ErrCompilation is returned when a template fails to compile.
-	ErrCompilation = errors.New("template compilation failed")
+	// ErrTemplateCompilation is returned when a template fails to compile.
+	ErrTemplateCompilation = errors.New("template compilation failed")
 )
 
 // CallContext is the context that is passed to go functions when called from js.
 type CallContext struct {
 	goja.FunctionCall
-	VM *jsVM
+	VM *vm.VM
 }
 
 // Opt is a function that configures the Engine.
@@ -107,32 +103,6 @@ type Engine struct {
 	jsFiles map[string]string
 }
 
-type jsVM struct {
-	*goja.Runtime
-}
-
-var _ template.VM = &jsVM{}
-
-func (v *jsVM) GetObject(val goja.Value) *goja.Object {
-	return val.ToObject(v.Runtime)
-}
-
-func (v *jsVM) Compile(name string, src string, strict bool) (*goja.Program, error) {
-	// transform src with esbuild -- this ensures we handle typescript
-	result := esbuild.Transform(src, esbuild.TransformOptions{
-		Target: esbuild.ES2015,
-		Loader: esbuild.LoaderTS,
-	})
-	if len(result.Errors) > 0 {
-		msg := ""
-		for _, errMsg := range result.Errors {
-			msg += fmt.Sprintf("%v @ %v %v:%v;", errMsg.Text, name, errMsg.Location.Line, errMsg.Location.Column)
-		}
-		return nil, fmt.Errorf("%w: %s", ErrCompilation, msg)
-	}
-	return goja.Compile(name, string(result.Code), strict)
-}
-
 // New creates a new Engine with the provided options.
 func New(opts ...Opt) *Engine {
 	t := &template.Templator{
@@ -182,13 +152,8 @@ func (e *Engine) RunScript(scriptFile string, data any) error {
 		return fmt.Errorf("failed to read script file: %w", err)
 	}
 
-	s, err := vm.Compile(scriptFile, string(script), true)
-	if err != nil {
-		return utils.HandleJSError("failed to compile script", err)
-	}
-
-	if _, err := vm.RunProgram(s); err != nil {
-		return utils.HandleJSError("failed to run script", err)
+	if _, err := vm.Run(scriptFile, string(script)); err != nil {
+		return err
 	}
 
 	return nil
@@ -225,88 +190,82 @@ func (e *Engine) RunTemplateStringInput(name, template string, data any) (string
 }
 
 //nolint:funlen
-func (e *Engine) init(data any) (*jsVM, error) {
+func (e *Engine) init(data any) (*vm.VM, error) {
 	if e.ran {
 		return nil, ErrAlreadyRan
 	}
 	e.ran = true
 
-	g := goja.New()
-	_, err := g.RunString(underscore.JS)
+	v, err := vm.New()
 	if err != nil {
-		return nil, utils.HandleJSError("failed to init underscore", err)
+		return nil, fmt.Errorf("failed to create vm: %w", err)
 	}
 
 	for name, content := range e.jsFiles {
-		_, err := g.RunString(content)
+		_, err := v.Run(name, content)
 		if err != nil {
-			return nil, utils.HandleJSError(fmt.Sprintf("failed to init %s", name), err)
+			return nil, fmt.Errorf("failed to init %s: %w", name, err)
 		}
 	}
 
-	new(require.Registry).Enable(g)
-	console.Enable(g)
-
-	vm := &jsVM{g}
-
-	for k, v := range e.jsFuncs {
-		wrappedFn := func(v func(call CallContext) goja.Value) func(call goja.FunctionCall) goja.Value {
+	for name, fn := range e.jsFuncs {
+		wrappedFn := func(fn func(call CallContext) goja.Value) func(call goja.FunctionCall) goja.Value {
 			return func(call goja.FunctionCall) goja.Value {
-				return v(CallContext{
+				return fn(CallContext{
 					FunctionCall: call,
-					VM:           vm,
+					VM:           v,
 				})
 			}
-		}(v)
+		}(fn)
 
-		if err := vm.Set(k, wrappedFn); err != nil {
-			return nil, fmt.Errorf("failed to set js function %s: %w", k, err)
+		if err := v.Set(name, wrappedFn); err != nil {
+			return nil, fmt.Errorf("failed to set js function %s: %w", name, err)
 		}
 	}
 
 	// This need to have the vm passed in so that the functions can be called
-	e.templator.TmplFuncs["templateFile"] = func(vm *jsVM) func(string, string, any) (string, error) {
+	e.templator.TmplFuncs["templateFile"] = func(v *vm.VM) func(string, string, any) (string, error) {
 		return func(templateFile, outFile string, data any) (string, error) {
-			err := e.templator.TemplateFile(vm, templateFile, outFile, data)
+			err := e.templator.TemplateFile(v, templateFile, outFile, data)
 			if err != nil {
 				return "", err
 			}
 
 			return "", nil
 		}
-	}(vm)
-	e.templator.TmplFuncs["templateString"] = func(vm *jsVM) func(string, any) (string, error) {
+	}(v)
+	e.templator.TmplFuncs["templateString"] = func(v *vm.VM) func(string, any) (string, error) {
 		return func(templateFile string, data any) (string, error) {
-			templated, err := e.templator.TemplateString(vm, templateFile, data)
+			templated, err := e.templator.TemplateString(v, templateFile, data)
 			if err != nil {
 				return "", err
 			}
 
 			return templated, nil
 		}
-	}(vm)
-	e.templator.TmplFuncs["templateStringInput"] = func(vm *jsVM) func(string, string, any) (string, error) {
+	}(v)
+	e.templator.TmplFuncs["templateStringInput"] = func(v *vm.VM) func(string, string, any) (string, error) {
 		return func(name, template string, data any) (string, error) {
-			templated, err := e.templator.TemplateStringInput(vm, name, template, data)
+			templated, err := e.templator.TemplateStringInput(v, name, template, data)
 			if err != nil {
 				return "", err
 			}
 
 			return templated, nil
 		}
-	}(vm)
+	}(v)
 
-	if _, err := vm.RunString(`function createComputedContextObject() { return {}; }`); err != nil {
+	if _, err := v.Run("init", `function createComputedContextObject() { return {}; }`); err != nil {
 		return nil, utils.HandleJSError("failed to init createComputedContextObject", err)
 	}
 
-	globalComputed, err := vm.RunString(`createComputedContextObject();`)
+	globalComputed, err := v.Run("init", `createComputedContextObject();`)
 	if err != nil {
 		return nil, utils.HandleJSError("failed to init globalComputed", err)
 	}
 
 	e.templator.SetContextData(data, globalComputed)
-	if err := vm.Set("context", &template.Context{
+	if err := v.Set("context", &template.Context{
 		Global:         data,
 		GlobalComputed: globalComputed,
 		Local:          data,
@@ -315,7 +274,7 @@ func (e *Engine) init(data any) (*jsVM, error) {
 		return nil, fmt.Errorf("failed to set context: %w", err)
 	}
 
-	return vm, nil
+	return v, nil
 }
 
 func (e *Engine) require(call CallContext) goja.Value {
@@ -334,12 +293,7 @@ func (e *Engine) require(call CallContext) goja.Value {
 		panic(vm.NewGoError(err))
 	}
 
-	s, err := vm.Compile(scriptPath, string(script), true)
-	if err != nil {
-		panic(vm.NewGoError(err))
-	}
-
-	if _, err := vm.RunProgram(s); err != nil {
+	if _, err := vm.Run(scriptPath, string(script)); err != nil {
 		panic(vm.NewGoError(err))
 	}
 

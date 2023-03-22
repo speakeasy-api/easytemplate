@@ -55,11 +55,11 @@ func TestTemplator_TemplateFile_Success(t *testing.T) {
 			o := goja.New()
 			contextVal := o.ToValue(context)
 
-			vm.EXPECT().RunString(`createComputedContextObject();`).Return(goja.Undefined(), nil).Times(1)
+			vm.EXPECT().Run("createComputedContextObject", `createComputedContextObject();`).Return(goja.Undefined(), nil).Times(1)
 			vm.EXPECT().Get("context").Return(goja.Undefined()).Times(1)
 			vm.EXPECT().Set("context", context).Return(nil).Times(1)
 			vm.EXPECT().Get("context").Return(contextVal).Times(1)
-			vm.EXPECT().GetObject(contextVal).Return(contextVal.ToObject(o)).Times(1)
+			vm.EXPECT().ToObject(contextVal).Return(contextVal.ToObject(o)).Times(1)
 			vm.EXPECT().Set("context", goja.Undefined()).Return(nil).Times(1)
 
 			tr := &template.Templator{
@@ -154,21 +154,19 @@ func TestTemplator_TemplateString_Success(t *testing.T) {
 			o := goja.New()
 			contextVal := o.ToValue(context)
 
-			vm.EXPECT().RunString(`createComputedContextObject();`).Return(goja.Undefined(), nil).Times(1)
+			vm.EXPECT().Run("createComputedContextObject", `createComputedContextObject();`).Return(goja.Undefined(), nil).Times(1)
 			vm.EXPECT().Get("context").Return(goja.Undefined()).Times(1)
 			vm.EXPECT().Set("context", context).Return(nil).Times(1)
 
 			if tt.fields.includedJS != "" {
-				vm.EXPECT().Compile("inline", tt.fields.includedJS, true).Return(&goja.Program{}, nil).Times(1)
-
 				vm.EXPECT().Get("render").Return(goja.Undefined()).Times(1)
 				vm.EXPECT().Set("render", gomock.Any()).Return(nil).Times(1)
-				vm.EXPECT().RunProgram(&goja.Program{}).Return(goja.Undefined(), nil).Times(1)
+				vm.EXPECT().Run("inline", tt.fields.includedJS).Return(goja.Undefined(), nil).Times(1)
 				vm.EXPECT().Set("render", goja.Undefined()).Return(nil).Times(1)
 			}
 
 			vm.EXPECT().Get("context").Return(contextVal).Times(1)
-			vm.EXPECT().GetObject(contextVal).Return(contextVal.ToObject(o)).Times(1)
+			vm.EXPECT().ToObject(contextVal).Return(contextVal.ToObject(o)).Times(1)
 			vm.EXPECT().Set("context", goja.Undefined()).Return(nil).Times(1)
 
 			tr := &template.Templator{
