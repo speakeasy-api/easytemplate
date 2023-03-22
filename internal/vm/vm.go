@@ -65,12 +65,12 @@ func (v *VM) Run(name string, src string) (goja.Value, error) {
 	}
 	var jsErr *goja.Exception
 	if !errors.As(err, &jsErr) {
-		return nil, fmt.Errorf("failed to run script: %w", errors.Join(ErrRuntime, err))
+		return nil, fmt.Errorf("failed to run script: %w", err)
 	}
 
 	m, err := sourcemap.Parse("", p.sourceMap)
 	if err != nil {
-		return nil, fmt.Errorf("failed to run script: %w", errors.Join(ErrRuntime, err))
+		return nil, fmt.Errorf("failed to run script: %w", err)
 	}
 
 	fixedStackTrace, _ := utils.ReplaceAllStringSubmatchFunc(lineNumberRegex, jsErr.String(), func(match []string) (string, error) {
