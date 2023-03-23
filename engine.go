@@ -202,7 +202,7 @@ func (e *Engine) init(data any) (*vm.VM, error) {
 	}
 
 	for name, content := range e.jsFiles {
-		_, err := v.Run(name, content)
+		_, err := v.RunString(content)
 		if err != nil {
 			return nil, fmt.Errorf("failed to init %s: %w", name, err)
 		}
