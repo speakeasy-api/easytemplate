@@ -43,10 +43,8 @@ type tmplContext struct {
 type VM interface {
 	Get(name string) goja.Value
 	Set(name string, value any) error
-	Compile(name string, src string, strict bool) (*goja.Program, error)
-	RunProgram(p *goja.Program) (result goja.Value, err error)
-	RunString(script string) (result goja.Value, err error)
-	GetObject(val goja.Value) *goja.Object
+	Run(name string, src string) (goja.Value, error)
+	ToObject(val goja.Value) *goja.Object
 }
 
 // Templator extends the go text/template package to allow for sjs snippets.
@@ -112,7 +110,7 @@ func (t *Templator) TemplateStringInput(vm VM, name string, input string, inputD
 		}
 	}()
 
-	localComputed, err := vm.RunString(`createComputedContextObject();`)
+	localComputed, err := vm.Run("createComputedContextObject", `createComputedContextObject();`)
 	if err != nil {
 		return "", utils.HandleJSError("failed to create local computed context", err)
 	}
@@ -184,11 +182,6 @@ func (t *Templator) evaluateInlineScripts(vm VM, templatePath, content string) (
 }
 
 func (t *Templator) execSJSBlock(vm VM, js, templatePath string) (string, error) {
-	s, err := vm.Compile("inline", js, true)
-	if err != nil {
-		return "", utils.HandleJSError("failed to compile inline script", err)
-	}
-
 	currentRender := vm.Get("render")
 
 	c := newInlineScriptContext()
@@ -196,8 +189,8 @@ func (t *Templator) execSJSBlock(vm VM, js, templatePath string) (string, error)
 		return "", fmt.Errorf("failed to set render function: %w", err)
 	}
 
-	if _, err := vm.RunProgram(s); err != nil {
-		return "", utils.HandleJSError(fmt.Sprintf("failed to run inline script in %s:\n%s", templatePath, js), err)
+	if _, err := vm.Run("inline", js); err != nil {
+		return "", fmt.Errorf("failed to run inline script in %s:\n%s - %w", templatePath, js, err)
 	}
 
 	if err := vm.Set("render", currentRender); err != nil {
@@ -211,7 +204,7 @@ func getComputedContext(vm VM) goja.Value {
 	// Get the local context back as it might have been modified by the inline script
 	contextVal := vm.Get("context")
 
-	computedVal := vm.GetObject(contextVal).Get("LocalComputed")
+	computedVal := vm.ToObject(contextVal).Get("LocalComputed")
 
 	return computedVal
 }

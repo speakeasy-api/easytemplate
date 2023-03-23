@@ -14,6 +14,7 @@ linters:
     - dupl
     - golint
     - maligned
+    - gci
     # deprecated/archived
     - interfacer
     - scopelint
