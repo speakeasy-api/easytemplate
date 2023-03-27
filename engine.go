@@ -281,7 +281,7 @@ func (e *Engine) init(data any) (*vm.VM, error) {
 func (e *Engine) unregisterTemplateFunc(call CallContext) goja.Value {
 	name := call.Argument(0).String()
 	if _, ok := e.templator.TmplFuncs[name]; !ok {
-		panic(call.VM.NewGoError(fmt.Errorf("%w: template function %s does not exists", ErrReserved, name)))
+		panic(call.VM.NewGoError(fmt.Errorf("%w: template function %s does not exist", ErrReserved, name)))
 	}
 
 	delete(e.templator.TmplFuncs, name)
