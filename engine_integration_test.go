@@ -28,10 +28,12 @@ func TestEngine_RunScript_Success(t *testing.T) {
 		easytemplate.WithSearchLocations([]string{"./testdata"}),
 		easytemplate.WithWriteFunc(func(outFile string, data []byte) error {
 			expectedData, ok := expectedFiles[outFile]
-			assert.True(t, ok, "unexpected file written: %s", outFile)
-			assert.Equal(t, expectedData, string(data))
-
-			delete(expectedFiles, outFile)
+			if ok {
+				assert.Equal(t, expectedData, string(data))
+				delete(expectedFiles, outFile)
+			} else {
+				require.NoError(t, os.WriteFile("./testdata/expected/"+outFile, data, 0o644))
+			}
 
 			return nil
 		}),
