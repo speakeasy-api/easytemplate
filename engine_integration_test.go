@@ -32,7 +32,7 @@ func TestEngine_RunScript_Success(t *testing.T) {
 				assert.Equal(t, expectedData, string(data))
 				delete(expectedFiles, outFile)
 			} else {
-				require.NoError(t, os.WriteFile("./testdata/expected/"+outFile, data, 0644))
+				require.NoError(t, os.WriteFile("./testdata/expected/"+outFile, data, 0o644))
 			}
 
 			return nil
