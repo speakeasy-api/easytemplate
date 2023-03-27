@@ -15,3 +15,5 @@ templateFile("templates/test.stmpl", "test.txt", {
   Value: multiply(add(reduced, 2), 2),
 });
 templateFile("templates/test5.stmpl", "test5.txt", {});
+
+require("./registerTest.js")

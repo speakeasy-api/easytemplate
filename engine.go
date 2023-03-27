@@ -126,11 +126,12 @@ func New(opts ...Opt) *Engine {
 	t.ReadFunc = e.readFile
 
 	e.jsFuncs = map[string]func(call CallContext) goja.Value{
-		"require":              e.require,
-		"templateFile":         e.templateFileJS,
-		"templateString":       e.templateStringJS,
-		"templateStringInput":  e.templateStringInputJS,
-		"registerTemplateFunc": e.registerTemplateFunc,
+		"require":                e.require,
+		"templateFile":           e.templateFileJS,
+		"templateString":         e.templateStringJS,
+		"templateStringInput":    e.templateStringInputJS,
+		"registerTemplateFunc":   e.registerTemplateFunc,
+		"unregisterTemplateFunc": e.unregisterTemplateFunc,
 	}
 
 	for _, opt := range opts {
@@ -275,6 +276,17 @@ func (e *Engine) init(data any) (*vm.VM, error) {
 	}
 
 	return v, nil
+}
+
+func (e *Engine) unregisterTemplateFunc(call CallContext) goja.Value {
+	name := call.Argument(0).String()
+	if _, ok := e.templator.TmplFuncs[name]; !ok {
+		panic(call.VM.NewGoError(fmt.Errorf("%w: template function %s does not exists", ErrReserved, name)))
+	}
+
+	delete(e.templator.TmplFuncs, name)
+
+	return goja.Undefined()
 }
 
 func (e *Engine) require(call CallContext) goja.Value {
