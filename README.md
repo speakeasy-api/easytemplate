@@ -95,7 +95,7 @@ sjs```
 
 ```go
 And then we are showing some computed text from JavaScript:
-{{ .SomeComputedText }}
+{{ .Local.SomeComputedText }}
 ```
 
 The rendered file `out.txt`
