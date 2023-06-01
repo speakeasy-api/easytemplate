@@ -13,6 +13,7 @@ import (
 
 	"github.com/dop251/goja"
 	"github.com/speakeasy-api/easytemplate/internal/utils"
+	"github.com/speakeasy-api/easytemplate/internal/vm"
 )
 
 type (
@@ -43,7 +44,7 @@ type tmplContext struct {
 type VM interface {
 	Get(name string) goja.Value
 	Set(name string, value any) error
-	Run(name string, src string) (goja.Value, error)
+	Run(name string, src string, opts ...vm.Option) (goja.Value, error)
 	ToObject(val goja.Value) *goja.Object
 }
 
@@ -165,7 +166,7 @@ func (t *Templator) evaluateInlineScripts(vm VM, templatePath, content string) (
 			return match[0], nil
 		}
 
-		output, err := t.execSJSBlock(vm, match[2], templatePath)
+		output, err := t.execSJSBlock(vm, match[2], templatePath, findJSBlockLineNumber(content, match[2]))
 		if err != nil {
 			return "", err
 		}
@@ -181,19 +182,19 @@ func (t *Templator) evaluateInlineScripts(vm VM, templatePath, content string) (
 	return evaluated, replacedLines, nil
 }
 
-func (t *Templator) execSJSBlock(vm VM, js, templatePath string) (string, error) {
-	currentRender := vm.Get("render")
+func (t *Templator) execSJSBlock(v VM, js, templatePath string, jsBlockLineNumber int) (string, error) {
+	currentRender := v.Get("render")
 
 	c := newInlineScriptContext()
-	if err := vm.Set("render", c.render); err != nil {
+	if err := v.Set("render", c.render); err != nil {
 		return "", fmt.Errorf("failed to set render function: %w", err)
 	}
 
-	if _, err := vm.Run("inline", js); err != nil {
-		return "", fmt.Errorf("failed to run inline script in %s:\n%s - %w", templatePath, js, err)
+	if _, err := v.Run(templatePath, js, vm.WithScriptStartingLineNumber(templatePath, jsBlockLineNumber)); err != nil {
+		return "", fmt.Errorf("failed to run inline script in %s:\n```sjs\n%ssjs```\n%w", templatePath, js, err)
 	}
 
-	if err := vm.Set("render", currentRender); err != nil {
+	if err := v.Set("render", currentRender); err != nil {
 		return "", fmt.Errorf("failed to unset render function: %w", err)
 	}
 
@@ -246,4 +247,20 @@ func adjustLineNumber(name string, err error, replacedLines int) error {
 	}
 
 	return err
+}
+
+func findJSBlockLineNumber(content string, block string) int {
+	const replacement = "~-~BLOCK_REPLACEMENT~-~"
+
+	content = strings.Replace(content, block, replacement, 1)
+
+	lines := strings.Split(content, "\n")
+
+	for i, line := range lines {
+		if strings.Contains(line, replacement) {
+			return i + 1
+		}
+	}
+
+	return 0
 }

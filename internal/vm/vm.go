@@ -26,11 +26,26 @@ var (
 	ErrRuntime = errors.New("script runtime failure")
 )
 
-var lineNumberRegex = regexp.MustCompile(`(?s).*?:([0-9]+):([0-9]+)\([0-9]+\)`)
+var lineNumberRegex = regexp.MustCompile(`at ([^ ]*?):([0-9]+):([0-9]+)\([0-9]+\)`)
 
 // VM is a wrapper around the goja runtime.
 type VM struct {
 	*goja.Runtime
+}
+
+type Options struct {
+	scriptStartingLineNumbers map[string]int
+}
+
+type Option func(*Options)
+
+func WithScriptStartingLineNumber(scriptName string, startingLineNumber int) Option {
+	return func(o *Options) {
+		if o.scriptStartingLineNumbers == nil {
+			o.scriptStartingLineNumbers = make(map[string]int)
+		}
+		o.scriptStartingLineNumbers[scriptName] = startingLineNumber
+	}
 }
 
 type program struct {
@@ -53,7 +68,12 @@ func New() (*VM, error) {
 }
 
 // Run runs a script in the VM.
-func (v *VM) Run(name string, src string) (goja.Value, error) {
+func (v *VM) Run(name string, src string, opts ...Option) (goja.Value, error) {
+	options := &Options{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
 	p, err := v.compile(name, src, true)
 	if err != nil {
 		return nil, err
@@ -74,27 +94,36 @@ func (v *VM) Run(name string, src string) (goja.Value, error) {
 	}
 
 	fixedStackTrace, _ := utils.ReplaceAllStringSubmatchFunc(lineNumberRegex, jsErr.String(), func(match []string) (string, error) {
-		const expectedMatches = 3
+		const expectedMatches = 4
 
 		if len(match) != expectedMatches {
 			return match[0], nil
 		}
 
-		line, err := strconv.Atoi(match[1])
+		file := match[1]
+
+		line, err := strconv.Atoi(match[2])
 		if err != nil {
 			return match[0], nil //nolint:nilerr
 		}
-		column, err := strconv.Atoi(match[2])
+		column, err := strconv.Atoi(match[3])
 		if err != nil {
 			return match[0], nil //nolint:nilerr
 		}
 
-		_, _, line, column, ok := m.Source(line, column)
-		if !ok {
-			return match[0], nil
+		remappedSuffix := ""
+		_, _, remappedLine, remappedColumn, ok := m.Source(line, column)
+		if ok {
+			line = remappedLine
+			column = remappedColumn
+			remappedSuffix = ":*"
 		}
 
-		return strings.Replace(match[0], fmt.Sprintf(":%s:%s", match[1], match[2]), fmt.Sprintf(":%d:%d", line, column), 1), nil
+		if startingLine, ok := options.scriptStartingLineNumbers[file]; ok {
+			line += startingLine - 1
+		}
+
+		return strings.Replace(match[0], fmt.Sprintf(":%s:%s", match[2], match[3]), fmt.Sprintf(":%d:%d%s", line, column, remappedSuffix), 1), nil
 	})
 
 	return nil, fmt.Errorf("failed to run script %s: %w", fixedStackTrace, ErrRuntime)
