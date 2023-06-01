@@ -9,6 +9,7 @@ import (
 
 	goja "github.com/dop251/goja"
 	gomock "github.com/golang/mock/gomock"
+	vm "github.com/speakeasy-api/easytemplate/internal/vm"
 )
 
 // MockVM is a mock of VM interface.
@@ -49,18 +50,23 @@ func (mr *MockVMMockRecorder) Get(arg0 interface{}) *gomock.Call {
 }
 
 // Run mocks base method.
-func (m *MockVM) Run(arg0, arg1 string) (goja.Value, error) {
+func (m *MockVM) Run(arg0, arg1 string, arg2 ...vm.Option) (goja.Value, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Run", arg0, arg1)
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "Run", varargs...)
 	ret0, _ := ret[0].(goja.Value)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Run indicates an expected call of Run.
-func (mr *MockVMMockRecorder) Run(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockVMMockRecorder) Run(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Run", reflect.TypeOf((*MockVM)(nil).Run), arg0, arg1)
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Run", reflect.TypeOf((*MockVM)(nil).Run), varargs...)
 }
 
 // Set mocks base method.

@@ -161,7 +161,7 @@ func TestTemplator_TemplateString_Success(t *testing.T) {
 			if tt.fields.includedJS != "" {
 				vm.EXPECT().Get("render").Return(goja.Undefined()).Times(1)
 				vm.EXPECT().Set("render", gomock.Any()).Return(nil).Times(1)
-				vm.EXPECT().Run("inline", tt.fields.includedJS).Return(goja.Undefined(), nil).Times(1)
+				vm.EXPECT().Run("test", tt.fields.includedJS, gomock.Any()).Return(goja.Undefined(), nil).Times(1)
 				vm.EXPECT().Set("render", goja.Undefined()).Return(nil).Times(1)
 			}
 

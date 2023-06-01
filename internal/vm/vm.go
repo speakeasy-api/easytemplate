@@ -33,12 +33,15 @@ type VM struct {
 	*goja.Runtime
 }
 
+// Options represents options for running a script.
 type Options struct {
 	scriptStartingLineNumbers map[string]int
 }
 
+// Option represents an option for running a script.
 type Option func(*Options)
 
+// WithScriptStartingLineNumber sets the starting line number for a script, used when adjusting line numbers in stack traces.
 func WithScriptStartingLineNumber(scriptName string, startingLineNumber int) Option {
 	return func(o *Options) {
 		if o.scriptStartingLineNumbers == nil {
