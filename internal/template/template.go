@@ -111,7 +111,7 @@ func (t *Templator) TemplateStringInput(vm VM, name string, input string, inputD
 		}
 	}()
 
-	localComputed, err := vm.Run("createComputedContextObject", `createComputedContextObject();`)
+	localComputed, err := vm.Run("localCreateComputedContextObject", `createComputedContextObject();`)
 	if err != nil {
 		return "", utils.HandleJSError("failed to create local computed context", err)
 	}
@@ -190,7 +190,7 @@ func (t *Templator) execSJSBlock(v VM, js, templatePath string, jsBlockLineNumbe
 		return "", fmt.Errorf("failed to set render function: %w", err)
 	}
 
-	if _, err := v.Run(templatePath, js, vm.WithScriptStartingLineNumber(templatePath, jsBlockLineNumber)); err != nil {
+	if _, err := v.Run(templatePath, js, vm.WithStartingLineNumber(jsBlockLineNumber)); err != nil {
 		return "", fmt.Errorf("failed to run inline script in %s:\n```sjs\n%ssjs```\n%w", templatePath, js, err)
 	}
 

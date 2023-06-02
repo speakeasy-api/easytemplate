@@ -26,7 +26,9 @@ var (
 	ErrRuntime = errors.New("script runtime failure")
 )
 
-var lineNumberRegex = regexp.MustCompile(`at ([^ ]*?):([0-9]+):([0-9]+)\([0-9]+\)`)
+var lineNumberRegex = regexp.MustCompile(` \(*([^ ]+):([0-9]+):([0-9]+)\([0-9]+\)`)
+
+var globalSourceMapCache = map[string]*sourcemap.Consumer{}
 
 // VM is a wrapper around the goja runtime.
 type VM struct {
@@ -35,19 +37,16 @@ type VM struct {
 
 // Options represents options for running a script.
 type Options struct {
-	scriptStartingLineNumbers map[string]int
+	startingLineNumber int
 }
 
 // Option represents an option for running a script.
 type Option func(*Options)
 
-// WithScriptStartingLineNumber sets the starting line number for a script, used when adjusting line numbers in stack traces.
-func WithScriptStartingLineNumber(scriptName string, startingLineNumber int) Option {
+// WithStartingLineNumber sets the starting line number for the script.
+func WithStartingLineNumber(lineNumber int) Option {
 	return func(o *Options) {
-		if o.scriptStartingLineNumbers == nil {
-			o.scriptStartingLineNumbers = make(map[string]int)
-		}
-		o.scriptStartingLineNumbers[scriptName] = startingLineNumber
+		o.startingLineNumber = lineNumber
 	}
 }
 
@@ -82,6 +81,13 @@ func (v *VM) Run(name string, src string, opts ...Option) (goja.Value, error) {
 		return nil, err
 	}
 
+	m, err := sourcemap.Parse("", p.sourceMap)
+	if err != nil {
+		return nil, fmt.Errorf("failed to compile source map for script: %w", err)
+	}
+
+	globalSourceMapCache[name] = m
+
 	res, err := v.Runtime.RunProgram(p.prog)
 	if err == nil {
 		return res, nil
@@ -91,43 +97,9 @@ func (v *VM) Run(name string, src string, opts ...Option) (goja.Value, error) {
 		return nil, fmt.Errorf("failed to run script: %w", err)
 	}
 
-	m, err := sourcemap.Parse("", p.sourceMap)
-	if err != nil {
-		return nil, fmt.Errorf("failed to run script: %w", err)
-	}
+	errString := jsErr.String()
 
-	fixedStackTrace, _ := utils.ReplaceAllStringSubmatchFunc(lineNumberRegex, jsErr.String(), func(match []string) (string, error) {
-		const expectedMatches = 4
-
-		if len(match) != expectedMatches {
-			return match[0], nil
-		}
-
-		file := match[1]
-
-		line, err := strconv.Atoi(match[2])
-		if err != nil {
-			return match[0], nil //nolint:nilerr
-		}
-		column, err := strconv.Atoi(match[3])
-		if err != nil {
-			return match[0], nil //nolint:nilerr
-		}
-
-		remappedSuffix := ""
-		_, _, remappedLine, remappedColumn, ok := m.Source(line, column)
-		if ok {
-			line = remappedLine
-			column = remappedColumn
-			remappedSuffix = ":*"
-		}
-
-		if startingLine, ok := options.scriptStartingLineNumbers[file]; ok {
-			line += startingLine - 1
-		}
-
-		return strings.Replace(match[0], fmt.Sprintf(":%s:%s", match[2], match[3]), fmt.Sprintf(":%d:%d%s", line, column, remappedSuffix), 1), nil
-	})
+	fixedStackTrace, _ := utils.ReplaceAllStringSubmatchFunc(lineNumberRegex, errString, remapLineNumbers(name, options.startingLineNumber))
 
 	return nil, fmt.Errorf("failed to run script %s: %w", fixedStackTrace, ErrRuntime)
 }
@@ -167,4 +139,44 @@ func (v *VM) compile(name string, src string, strict bool) (*program, error) {
 		prog:      p,
 		sourceMap: result.Map,
 	}, nil
+}
+
+func remapLineNumbers(name string, startingLineNumber int) func(match []string) (string, error) {
+	return func(match []string) (string, error) {
+		const expectedMatches = 4
+
+		if len(match) != expectedMatches {
+			return match[0], nil
+		}
+
+		file := match[1]
+
+		sm, ok := globalSourceMapCache[file]
+		if !ok {
+			return match[0], nil
+		}
+
+		remappedSuffix := ""
+		line, err := strconv.Atoi(match[2])
+		if err != nil {
+			return match[0], nil //nolint:nilerr
+		}
+		column, err := strconv.Atoi(match[3])
+		if err != nil {
+			return match[0], nil //nolint:nilerr
+		}
+
+		_, _, remappedLine, remappedColumn, ok := sm.Source(line, column)
+		if ok {
+			line = remappedLine
+			column = remappedColumn
+			remappedSuffix = ":*"
+		}
+
+		if file == name && startingLineNumber > 0 {
+			line += startingLineNumber - 1
+		}
+
+		return strings.Replace(match[0], fmt.Sprintf(":%s:%s", match[2], match[3]), fmt.Sprintf(":%d:%d%s", line, column, remappedSuffix), 1), nil
+	}
 }

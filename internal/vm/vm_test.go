@@ -22,5 +22,5 @@ function test(input: Test): string {
 test({ Name: "test" });`
 
 	_, err = v.Run("test", typeScript)
-	assert.Equal(t, "failed to run script Error: test error\n\tat test (test:2:9(3))\n\tat test:8:5:*(6)\n: script runtime failure", err.Error())
+	assert.Equal(t, "failed to run script Error: test error\n\tat test (test:5:7:*(3))\n\tat test:8:5:*(6)\n: script runtime failure", err.Error())
 }

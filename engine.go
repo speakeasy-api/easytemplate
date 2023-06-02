@@ -256,11 +256,11 @@ func (e *Engine) init(data any) (*vm.VM, error) {
 		}
 	}(v)
 
-	if _, err := v.Run("init", `function createComputedContextObject() { return {}; }`); err != nil {
+	if _, err := v.Run("initCreateComputedContextObject", `function createComputedContextObject() { return {}; }`); err != nil {
 		return nil, utils.HandleJSError("failed to init createComputedContextObject", err)
 	}
 
-	globalComputed, err := v.Run("init", `createComputedContextObject();`)
+	globalComputed, err := v.Run("globalCreateComputedContextObject", `createComputedContextObject();`)
 	if err != nil {
 		return nil, utils.HandleJSError("failed to init globalComputed", err)
 	}
