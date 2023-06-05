@@ -1,5 +1,9 @@
 # easytemplate
 
+[![made-with-Go](https://img.shields.io/badge/Made%20with-Go-1f425f.svg)](https://go.dev/)
+[![Go Report Card](https://goreportcard.com/badge/github.com/speakeasy-api/easytemplate)](https://goreportcard.com/report/github.com/speakeasy-api/easytemplate)
+[![GoDoc](https://godoc.org/github.com/speakeasy-api/easytemplate?status.svg)](https://godoc.org/github.com/speakeasy-api/easytemplate)
+
 ![181640742-31ab234a-3b39-432e-b899-21037596b360](https://user-images.githubusercontent.com/68016351/196461357-fcb8d90f-cd67-498e-850f-6146c58d0114.png)
 
 **easytemplate** is Go's [text/template](https://pkg.go.dev/text/template) with 🦸 super powers 🦸. It is a templating engine that allows you to use Go's [text/template](https://pkg.go.dev/text/template) syntax, but with the ability to use JavaScript snippets to manipulate data, control templating and run more complex logic while templating.
