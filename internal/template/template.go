@@ -2,10 +2,12 @@
 package template
 
 //go:generate mockgen -destination=./mocks/template_mock.go -package mocks github.com/speakeasy-api/easytemplate/internal/template VM
+//go:generate mockgen -destination=./mocks/fileinfo.go -package mocks io/fs FileInfo
 
 import (
 	"bytes"
 	"fmt"
+	"io/fs"
 	"regexp"
 	"strconv"
 	"strings"
@@ -18,9 +20,14 @@ import (
 
 type (
 	// WriteFunc represents a function that writes a file.
+	// Deprecated: Use WriteFileFunc instead.
 	WriteFunc func(string, []byte) error
+	// WriteFileFunc represents a function that writes a file.
+	WriteFileFunc func(string, []byte, fs.FileMode) error
 	// ReadFunc represents a function that reads a file.
 	ReadFunc func(string) ([]byte, error)
+	// StatFunc can stat a file to determine its attributes.
+	StatFunc func(string) (fs.FileInfo, error)
 )
 
 var sjsRegex = regexp.MustCompile("(?ms)(```sjs\\s*\\n*(.*?)sjs```)")
@@ -50,8 +57,11 @@ type VM interface {
 
 // Templator extends the go text/template package to allow for sjs snippets.
 type Templator struct {
+	// WriteFunc is the WriteFunc to use. Deprecated: Use WriteFileFunc instead.
 	WriteFunc      WriteFunc
+	WriteFileFunc  WriteFileFunc
 	ReadFunc       ReadFunc
+	StatFunc       StatFunc
 	TmplFuncs      map[string]any
 	contextData    any
 	globalComputed goja.Value
@@ -63,6 +73,33 @@ func (t *Templator) SetContextData(contextData any, globalComputed goja.Value) {
 	t.globalComputed = globalComputed
 }
 
+// GetFileMode returns the file mode of the given file, if a StatFunc and WriteFileFunc have been provided (both are
+// checked because even if you provide StatFunc, but no WriteFileFunc, the returned value will be ignored). Otherwise,
+// it falls back to 0644. This permission is used for determining which file mode to give files in TemplateFile.
+func (t *Templator) GetFileMode(name string) (fs.FileMode, error) {
+	if t.StatFunc != nil && t.WriteFileFunc != nil {
+		// TODO
+		info, err := t.StatFunc(name)
+		if err != nil {
+			return 0, err
+		}
+
+		return info.Mode() & fs.ModePerm, nil
+	}
+	// fallback to default
+	return 0644, nil
+}
+
+// WriteFile writes out the file using the WriteFileFunc. If no WriteFileFunc is provided, it will fall back to
+// WriteFunc.
+func (t *Templator) WriteFile(name string, data []byte, perm fs.FileMode) error {
+	if t.WriteFileFunc != nil {
+		return t.WriteFileFunc(name, data, perm)
+	} else {
+		return t.WriteFunc(name, data)
+	}
+}
+
 // TemplateFile will template a file and write the output to outFile.
 func (t *Templator) TemplateFile(vm VM, templateFile, outFile string, inputData any) error {
 	output, err := t.TemplateString(vm, templateFile, inputData)
@@ -70,7 +107,12 @@ func (t *Templator) TemplateFile(vm VM, templateFile, outFile string, inputData 
 		return err
 	}
 
-	if err := t.WriteFunc(outFile, []byte(output)); err != nil {
+	perm, err := t.GetFileMode(templateFile)
+	if err != nil {
+		return err
+	}
+
+	if err := t.WriteFile(outFile, []byte(output), perm); err != nil {
 		return fmt.Errorf("failed to write file %s: %w", outFile, err)
 	}
 

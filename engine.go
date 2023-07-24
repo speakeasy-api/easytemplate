@@ -52,9 +52,25 @@ func WithReadFileSystem(fs fs.FS) Opt {
 }
 
 // WithWriteFunc sets the write function to use for writing files. This is useful for writing to locations other than disk.
+// Deprecated: Use WithWriteFileFunc instead.
 func WithWriteFunc(writeFunc func(string, []byte) error) Opt {
 	return func(e *Engine) {
 		e.templator.WriteFunc = writeFunc
+	}
+}
+
+// WithWriteFileFunc sets the write function to use for writing files. This is useful for writing to locations other
+// than disk.
+func WithWriteFileFunc(writeFunc func(string, []byte, fs.FileMode) error) Opt {
+	return func(e *Engine) {
+		e.templator.WriteFileFunc = writeFunc
+	}
+}
+
+// WithStatFunc sets the Stat function to use for getting the fs.FileInfo for a named file.
+func WithStatFunc(statFunc func(string) (fs.FileInfo, error)) Opt {
+	return func(e *Engine) {
+		e.templator.StatFunc = statFunc
 	}
 }
 
@@ -112,9 +128,6 @@ func New(opts ...Opt) *Engine {
 			"templateString":      nil,
 			"templateStringInput": nil,
 		},
-		WriteFunc: func(s string, b []byte) error {
-			return os.WriteFile(s, b, os.ModePerm)
-		},
 	}
 
 	e := &Engine{
@@ -136,6 +149,13 @@ func New(opts ...Opt) *Engine {
 
 	for _, opt := range opts {
 		opt(e)
+	}
+
+	if t.WriteFunc == nil && t.WriteFileFunc == nil {
+		t.WriteFileFunc = os.WriteFile
+		if t.StatFunc == nil {
+			t.StatFunc = os.Stat
+		}
 	}
 
 	return e

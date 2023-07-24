@@ -1,6 +1,7 @@
 package template_test
 
 import (
+	"io/fs"
 	"testing"
 
 	"github.com/dop251/goja"
@@ -25,6 +26,7 @@ func TestTemplator_TemplateFile_Success(t *testing.T) {
 		fields  fields
 		args    args
 		wantOut string
+		perm    fs.FileMode
 	}{
 		{
 			name: "success",
@@ -37,9 +39,23 @@ func TestTemplator_TemplateFile_Success(t *testing.T) {
 				inputData:    map[string]interface{}{"Test": "local"},
 			},
 			wantOut: "global\nlocal",
+			perm:    0644,
+		},
+		{
+			name: "success",
+			fields: fields{
+				contextData: map[string]interface{}{"Test": "global"},
+				template:    "{{ .Global.Test }}\n{{ .Local.Test }}",
+			},
+			args: args{
+				templatePath: "test",
+				inputData:    map[string]interface{}{"Test": "local"},
+			},
+			wantOut: "global\nlocal",
+			perm:    0755,
 		},
 	}
-	for _, tt := range tests {
+	for i, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
@@ -67,10 +83,16 @@ func TestTemplator_TemplateFile_Success(t *testing.T) {
 					assert.Equal(t, tt.args.templatePath, s)
 					return []byte(tt.fields.template), nil
 				},
-				WriteFunc: func(s string, b []byte) error {
+				WriteFileFunc: func(s string, b []byte, perm fs.FileMode) error {
 					assert.Equal(t, tt.args.outFile, s)
 					assert.Equal(t, tt.wantOut, string(b))
+					assert.Equal(t, tt.perm, perm, "WriteFileFunc run #%d expects perm %o / got %o", i, tt.perm, perm)
 					return nil
+				},
+				StatFunc: func(s string) (fs.FileInfo, error) {
+					fi := mocks.NewMockFileInfo(ctrl)
+					fi.EXPECT().Mode().Return(tt.perm)
+					return fi, nil
 				},
 			}
 			tr.SetContextData(tt.fields.contextData, goja.Undefined())
@@ -96,6 +118,7 @@ func TestTemplator_TemplateString_Success(t *testing.T) {
 		fields  fields
 		args    args
 		wantOut string
+		perm    fs.FileMode
 	}{
 		{
 			name: "successfully templates simple template",
