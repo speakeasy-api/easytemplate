@@ -87,7 +87,7 @@ func (t *Templator) GetFileMode(name string) (fs.FileMode, error) {
 		return info.Mode() & fs.ModePerm, nil
 	}
 	// fallback to default
-	return 0644, nil
+	return 0o644, nil
 }
 
 // WriteFile writes out the file using the WriteFileFunc. If no WriteFileFunc is provided, it will fall back to

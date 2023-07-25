@@ -39,7 +39,7 @@ func TestTemplator_TemplateFile_Success(t *testing.T) {
 				inputData:    map[string]interface{}{"Test": "local"},
 			},
 			wantOut: "global\nlocal",
-			perm:    0644,
+			perm:    0o644,
 		},
 		{
 			name: "success",
@@ -52,7 +52,7 @@ func TestTemplator_TemplateFile_Success(t *testing.T) {
 				inputData:    map[string]interface{}{"Test": "local"},
 			},
 			wantOut: "global\nlocal",
-			perm:    0755,
+			perm:    0o755,
 		},
 	}
 	for i, tt := range tests {
