@@ -47,6 +47,8 @@ type tmplContext struct {
 	LocalComputed  any
 }
 
+const defaultReadPerm = 0o644
+
 // VM represents a virtual machine that can be used to run js.
 type VM interface {
 	Get(name string) goja.Value
@@ -87,7 +89,7 @@ func (t *Templator) GetFileMode(name string) (fs.FileMode, error) {
 		return info.Mode() & fs.ModePerm, nil
 	}
 	// fallback to default
-	return 0o644, nil
+	return defaultReadPerm, nil
 }
 
 // WriteFile writes out the file using the WriteFileFunc. If no WriteFileFunc is provided, it will fall back to
@@ -95,9 +97,8 @@ func (t *Templator) GetFileMode(name string) (fs.FileMode, error) {
 func (t *Templator) WriteFile(name string, data []byte, perm fs.FileMode) error {
 	if t.WriteFileFunc != nil {
 		return t.WriteFileFunc(name, data, perm)
-	} else {
-		return t.WriteFunc(name, data)
 	}
+	return t.WriteFunc(name, data)
 }
 
 // TemplateFile will template a file and write the output to outFile.
