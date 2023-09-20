@@ -187,7 +187,7 @@ func (e *Engine) MethodExecutor(scriptFile string, data any) (func(fnName string
 				msg += fmt.Sprintf("%v @ %v %v:%v;", errMsg.Text, scriptFile, errMsg.Location.Line, errMsg.Location.Column)
 			}
 		}
-		return nil, fmt.Errorf("%w: %s", errors.New("script compilation failed"), msg)
+		return nil, fmt.Errorf("script compilation failed: %s", msg)
 	}
 
 	if _, err := vm.Run(scriptFile, string(script)); err != nil {
