@@ -12,6 +12,7 @@ import (
 	"path"
 
 	"github.com/dop251/goja"
+	esbuild "github.com/evanw/esbuild/pkg/api"
 	"github.com/speakeasy-api/easytemplate/internal/template"
 	"github.com/speakeasy-api/easytemplate/internal/utils"
 	"github.com/speakeasy-api/easytemplate/internal/vm"
@@ -158,6 +159,61 @@ func (e *Engine) RunScript(scriptFile string, data any) error {
 	}
 
 	return nil
+}
+
+// MethodExecutor returns an execution function that enables calls to global template methods from easytemplate
+func (e *Engine) MethodExecutor(scriptFile string, data any) (func(fnName string, args ...interface{}) (interface{}, error), error) {
+	vm, err := e.init(data)
+	if err != nil {
+		return nil, err
+	}
+
+	script, err := e.readFile(scriptFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read script file: %w", err)
+	}
+
+	result := esbuild.Transform(string(script), esbuild.TransformOptions{
+		Target:    esbuild.ES2015,
+		Loader:    esbuild.LoaderTS,
+		Sourcemap: esbuild.SourceMapExternal,
+	})
+	if len(result.Errors) > 0 {
+		msg := ""
+		for _, errMsg := range result.Errors {
+			if errMsg.Location == nil {
+				msg += fmt.Sprintf("%v @ %v;", errMsg.Text, scriptFile)
+			} else {
+				msg += fmt.Sprintf("%v @ %v %v:%v;", errMsg.Text, scriptFile, errMsg.Location.Line, errMsg.Location.Column)
+			}
+		}
+		return nil, fmt.Errorf("%w: %s", errors.New("script compilation failed"), msg)
+	}
+
+	if _, err := vm.Run(scriptFile, string(script)); err != nil {
+		return nil, err
+	}
+
+	runFn := func(fnName string, args ...interface{}) (interface{}, error) {
+		fn, ok := goja.AssertFunction(vm.Get(fnName))
+		if !ok {
+			return nil, fmt.Errorf("failed to find %s function", fnName)
+		}
+
+		gojaArgs := make([]goja.Value, len(args))
+		for i, arg := range args {
+			gojaArgs[i] = vm.ToValue(arg)
+		}
+
+		val, err := fn(goja.Undefined(), gojaArgs...)
+		if err != nil {
+			return nil, err
+		}
+
+		return val.Export(), nil
+	}
+
+	return runFn, nil
 }
 
 // RunTemplate runs the provided template file, with the provided data, starting the template engine and templating the provided template to a file.
