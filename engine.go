@@ -27,6 +27,10 @@ var (
 	ErrInvalidArg = errors.New("invalid argument")
 	// ErrTemplateCompilation is returned when a template fails to compile.
 	ErrTemplateCompilation = errors.New("template compilation failed")
+	// ErrFunctionNotFound Function does not exist in script
+	ErrFunctionNotFound = errors.New("failed to find function")
+	// ErrScriptCompilation The provided script cannot compile
+	ErrScriptCompilation = errors.New("script compilation failed")
 )
 
 // CallContext is the context that is passed to go functions when called from js.
@@ -161,7 +165,7 @@ func (e *Engine) RunScript(scriptFile string, data any) error {
 	return nil
 }
 
-// MethodExecutor returns an execution function that enables calls to global template methods from easytemplate
+// MethodExecutor returns an execution function that enables calls to global template methods from easytemplate.
 func (e *Engine) MethodExecutor(scriptFile string, data any) (func(fnName string, args ...interface{}) (interface{}, error), error) {
 	vm, err := e.init(data)
 	if err != nil {
@@ -187,7 +191,7 @@ func (e *Engine) MethodExecutor(scriptFile string, data any) (func(fnName string
 				msg += fmt.Sprintf("%v @ %v %v:%v;", errMsg.Text, scriptFile, errMsg.Location.Line, errMsg.Location.Column)
 			}
 		}
-		return nil, fmt.Errorf("script compilation failed: %s", msg)
+		return nil, fmt.Errorf("%w: %s", ErrScriptCompilation, msg)
 	}
 
 	if _, err := vm.Run(scriptFile, string(script)); err != nil {
@@ -197,7 +201,7 @@ func (e *Engine) MethodExecutor(scriptFile string, data any) (func(fnName string
 	runFn := func(fnName string, args ...interface{}) (interface{}, error) {
 		fn, ok := goja.AssertFunction(vm.Get(fnName))
 		if !ok {
-			return nil, fmt.Errorf("failed to find %s function", fnName)
+			return nil, fmt.Errorf("%w: %s", ErrFunctionNotFound, fnName)
 		}
 
 		gojaArgs := make([]goja.Value, len(args))
