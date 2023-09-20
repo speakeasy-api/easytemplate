@@ -27,9 +27,9 @@ var (
 	ErrInvalidArg = errors.New("invalid argument")
 	// ErrTemplateCompilation is returned when a template fails to compile.
 	ErrTemplateCompilation = errors.New("template compilation failed")
-	// ErrFunctionNotFound Function does not exist in script
+	// ErrFunctionNotFound Function does not exist in script.
 	ErrFunctionNotFound = errors.New("failed to find function")
-	// ErrScriptCompilation The provided script cannot compile
+	// ErrScriptCompilation The provided script cannot compile.
 	ErrScriptCompilation = errors.New("script compilation failed")
 )
 
