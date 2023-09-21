@@ -26,6 +26,8 @@ var (
 	ErrInvalidArg = errors.New("invalid argument")
 	// ErrTemplateCompilation is returned when a template fails to compile.
 	ErrTemplateCompilation = errors.New("template compilation failed")
+	// ErrFunctionNotFound Function does not exist in script.
+	ErrFunctionNotFound = errors.New("failed to find function")
 )
 
 // CallContext is the context that is passed to go functions when called from js.
@@ -158,6 +160,39 @@ func (e *Engine) RunScript(scriptFile string, data any) error {
 	}
 
 	return nil
+}
+
+// RunMethod enables calls to global template methods from easytemplate.
+func (e *Engine) RunMethod(scriptFile string, data any, fnName string, args ...any) (goja.Value, error) {
+	vm, err := e.init(data)
+	if err != nil {
+		return nil, err
+	}
+
+	script, err := e.readFile(scriptFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read script file: %w", err)
+	}
+
+	if _, err := vm.Run(scriptFile, string(script)); err != nil {
+		return nil, err
+	}
+
+	fn, ok := goja.AssertFunction(vm.Get(fnName))
+	if !ok {
+		return nil, fmt.Errorf("%w: %s", ErrFunctionNotFound, fnName)
+	}
+
+	gojaArgs := make([]goja.Value, len(args))
+	for i, arg := range args {
+		gojaArgs[i] = vm.ToValue(arg)
+	}
+	val, err := fn(goja.Undefined(), gojaArgs...)
+	if err != nil {
+		return nil, err
+	}
+
+	return val, nil
 }
 
 // RunTemplate runs the provided template file, with the provided data, starting the template engine and templating the provided template to a file.
