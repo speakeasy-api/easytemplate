@@ -12,7 +12,6 @@ import (
 	"path"
 
 	"github.com/dop251/goja"
-	esbuild "github.com/evanw/esbuild/pkg/api"
 	"github.com/speakeasy-api/easytemplate/internal/template"
 	"github.com/speakeasy-api/easytemplate/internal/utils"
 	"github.com/speakeasy-api/easytemplate/internal/vm"
@@ -29,8 +28,6 @@ var (
 	ErrTemplateCompilation = errors.New("template compilation failed")
 	// ErrFunctionNotFound Function does not exist in script.
 	ErrFunctionNotFound = errors.New("failed to find function")
-	// ErrScriptCompilation The provided script cannot compile.
-	ErrScriptCompilation = errors.New("script compilation failed")
 )
 
 // CallContext is the context that is passed to go functions when called from js.
@@ -165,8 +162,8 @@ func (e *Engine) RunScript(scriptFile string, data any) error {
 	return nil
 }
 
-// MethodExecutor returns an execution function that enables calls to global template methods from easytemplate.
-func (e *Engine) MethodExecutor(scriptFile string, data any) (func(fnName string, args ...interface{}) (interface{}, error), error) {
+// RunMethod enables calls to global template methods from easytemplate.
+func (e *Engine) RunMethod(scriptFile string, data any, fnName string, args ...interface{}) (goja.Value, error) {
 	vm, err := e.init(data)
 	if err != nil {
 		return nil, err
@@ -177,47 +174,26 @@ func (e *Engine) MethodExecutor(scriptFile string, data any) (func(fnName string
 		return nil, fmt.Errorf("failed to read script file: %w", err)
 	}
 
-	result := esbuild.Transform(string(script), esbuild.TransformOptions{
-		Target:    esbuild.ES2015,
-		Loader:    esbuild.LoaderTS,
-		Sourcemap: esbuild.SourceMapExternal,
-	})
-	if len(result.Errors) > 0 {
-		msg := ""
-		for _, errMsg := range result.Errors {
-			if errMsg.Location == nil {
-				msg += fmt.Sprintf("%v @ %v;", errMsg.Text, scriptFile)
-			} else {
-				msg += fmt.Sprintf("%v @ %v %v:%v;", errMsg.Text, scriptFile, errMsg.Location.Line, errMsg.Location.Column)
-			}
-		}
-		return nil, fmt.Errorf("%w: %s", ErrScriptCompilation, msg)
-	}
-
 	if _, err := vm.Run(scriptFile, string(script)); err != nil {
 		return nil, err
 	}
 
-	runFn := func(fnName string, args ...interface{}) (interface{}, error) {
-		fn, ok := goja.AssertFunction(vm.Get(fnName))
-		if !ok {
-			return nil, fmt.Errorf("%w: %s", ErrFunctionNotFound, fnName)
-		}
-
-		gojaArgs := make([]goja.Value, len(args))
-		for i, arg := range args {
-			gojaArgs[i] = vm.ToValue(arg)
-		}
-
-		val, err := fn(goja.Undefined(), gojaArgs...)
-		if err != nil {
-			return nil, err
-		}
-
-		return val.Export(), nil
+	fn, ok := goja.AssertFunction(vm.Get(fnName))
+	if !ok {
+		return nil, fmt.Errorf("%w: %s", ErrFunctionNotFound, fnName)
 	}
 
-	return runFn, nil
+	gojaArgs := make([]goja.Value, len(args))
+	for i, arg := range args {
+		gojaArgs[i] = vm.ToValue(arg)
+	}
+
+	val, err := fn(goja.Undefined(), gojaArgs...)
+	if err != nil {
+		return nil, err
+	}
+
+	return val, nil
 }
 
 // RunTemplate runs the provided template file, with the provided data, starting the template engine and templating the provided template to a file.
