@@ -163,7 +163,7 @@ func (e *Engine) RunScript(scriptFile string, data any) error {
 }
 
 // RunMethod enables calls to global template methods from easytemplate.
-func (e *Engine) RunMethod(scriptFile string, data any, fnName string, args ...interface{}) (goja.Value, error) {
+func (e *Engine) RunMethod(scriptFile string, data any, fnName string, args ...any) (goja.Value, error) {
 	vm, err := e.init(data)
 	if err != nil {
 		return nil, err
@@ -187,7 +187,6 @@ func (e *Engine) RunMethod(scriptFile string, data any, fnName string, args ...i
 	for i, arg := range args {
 		gojaArgs[i] = vm.ToValue(arg)
 	}
-
 	val, err := fn(goja.Undefined(), gojaArgs...)
 	if err != nil {
 		return nil, err
