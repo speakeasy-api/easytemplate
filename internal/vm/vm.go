@@ -28,11 +28,10 @@ var (
 
 var lineNumberRegex = regexp.MustCompile(` \(*([^ ]+):([0-9]+):([0-9]+)\([0-9]+\)`)
 
-var globalSourceMapCache = map[string]*sourcemap.Consumer{}
-
 // VM is a wrapper around the goja runtime.
 type VM struct {
 	*goja.Runtime
+	globalSourceMapCache map[string]*sourcemap.Consumer
 }
 
 // Options represents options for running a script.
@@ -66,7 +65,7 @@ func New() (*VM, error) {
 	new(require.Registry).Enable(g)
 	console.Enable(g)
 
-	return &VM{Runtime: g}, nil
+	return &VM{Runtime: g, globalSourceMapCache: make(map[string]*sourcemap.Consumer)}, nil
 }
 
 // Run runs a script in the VM.
@@ -86,7 +85,7 @@ func (v *VM) Run(name string, src string, opts ...Option) (goja.Value, error) {
 		return nil, fmt.Errorf("failed to compile source map for script: %w", err)
 	}
 
-	globalSourceMapCache[name] = m
+	v.globalSourceMapCache[name] = m
 
 	res, err := v.Runtime.RunProgram(p.prog)
 	if err == nil {
@@ -99,7 +98,7 @@ func (v *VM) Run(name string, src string, opts ...Option) (goja.Value, error) {
 
 	errString := jsErr.String()
 
-	fixedStackTrace, _ := utils.ReplaceAllStringSubmatchFunc(lineNumberRegex, errString, remapLineNumbers(name, options.startingLineNumber))
+	fixedStackTrace, _ := utils.ReplaceAllStringSubmatchFunc(lineNumberRegex, errString, v.remapLineNumbers(name, options.startingLineNumber))
 
 	return nil, fmt.Errorf("failed to run script %s: %w", fixedStackTrace, ErrRuntime)
 }
@@ -141,7 +140,7 @@ func (v *VM) compile(name string, src string, strict bool) (*program, error) {
 	}, nil
 }
 
-func remapLineNumbers(name string, startingLineNumber int) func(match []string) (string, error) {
+func (v *VM) remapLineNumbers(name string, startingLineNumber int) func(match []string) (string, error) {
 	return func(match []string) (string, error) {
 		const expectedMatches = 4
 
@@ -151,7 +150,7 @@ func remapLineNumbers(name string, startingLineNumber int) func(match []string) 
 
 		file := match[1]
 
-		sm, ok := globalSourceMapCache[file]
+		sm, ok := v.globalSourceMapCache[file]
 		if !ok {
 			return match[0], nil
 		}
