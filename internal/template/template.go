@@ -271,7 +271,7 @@ func recurseCanary() []string {
 }
 
 // Recurse will let the engine know how many times the template should execute.
-func (t *Templator) Recurse(vm VM, numTimes int) (out string, err error) {
+func (t *Templator) Recurse(_ VM, numTimes int) (out string, err error) {
 	if numTimes < 1 || numTimes > len(recurseCanary()) {
 		return "", fmt.Errorf("recurse(%v) invalid: %v outside bounds 1..%v", numTimes, numTimes, len(recurseCanary()))
 	}
