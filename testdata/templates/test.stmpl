@@ -2,3 +2,5 @@
 {{.Local.Test}}
 {{templateFile "templates/test2.stmpl" "test2.txt" "from test.stmpl"}}
 {{toFloatWithPrecision .Local.Value 3}}
+{{templateStringInput "hello" "Hello {{.Local}}" "User"}}
+{{templateStringMultiple "templates/testMultiple.stmpl" nil 3}}

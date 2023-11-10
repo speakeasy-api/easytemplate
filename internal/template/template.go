@@ -77,6 +77,20 @@ func (t *Templator) TemplateFile(vm VM, templateFile, outFile string, inputData 
 	return nil
 }
 
+// TemplateFileMultiple will template the provided file numTimes and write the output to outFile.
+func (t *Templator) TemplateFileMultiple(vm VM, templateFile, outFile string, inputData any, numTimes int) error {
+	output, err := t.TemplateString(vm, templateFile, inputData)
+	if err != nil {
+		return err
+	}
+
+	if err := t.WriteFunc(outFile, []byte(output)); err != nil {
+		return fmt.Errorf("failed to write file %s: %w", outFile, err)
+	}
+
+	return nil
+}
+
 type inlineScriptContext struct {
 	renderedContent []string
 }
@@ -100,11 +114,21 @@ func (t *Templator) TemplateString(vm VM, templatePath string, inputData any) (o
 		return "", fmt.Errorf("failed to read template file: %w", err)
 	}
 
-	return t.TemplateStringInput(vm, templatePath, string(data), inputData)
+	return t.TemplateStringInput(vm, templatePath, string(data), inputData, 1)
+}
+
+// TemplateStringMultiple will template the provided file numTimes and return the output as a string.
+func (t *Templator) TemplateStringMultiple(vm VM, templatePath string, inputData any, numTimes int) (out string, err error) {
+	data, err := t.ReadFunc(templatePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read template file: %w", err)
+	}
+
+	return t.TemplateStringInput(vm, templatePath, string(data), inputData, numTimes)
 }
 
 // TemplateStringInput will template the provided input string and return the output as a string.
-func (t *Templator) TemplateStringInput(vm VM, name string, input string, inputData any) (out string, err error) {
+func (t *Templator) TemplateStringInput(vm VM, name string, input string, inputData any, numTimes int) (out string, err error) {
 	defer func() {
 		if e := recover(); e != nil {
 			err = fmt.Errorf("failed to render template: %s", e)
@@ -116,37 +140,43 @@ func (t *Templator) TemplateStringInput(vm VM, name string, input string, inputD
 		return "", utils.HandleJSError("failed to create local computed context", err)
 	}
 
-	context := &Context{
-		Global:         t.contextData,
-		GlobalComputed: t.globalComputed,
-		Local:          inputData,
-		LocalComputed:  localComputed,
-	}
-
 	currentContext := vm.Get("context")
 
-	if err := vm.Set("context", context); err != nil {
-		return "", fmt.Errorf("failed to set context: %w", err)
-	}
+	for i := 0; i < numTimes; i++ {
+		context := &Context{
+			Global:         t.contextData,
+			GlobalComputed: t.globalComputed,
+			Local:          inputData,
+			LocalComputed:  localComputed,
+		}
 
-	evaluated, replacedLines, err := t.evaluateInlineScripts(vm, name, input)
-	if err != nil {
-		return "", err
-	}
+		if err := vm.Set("context", context); err != nil {
+			return "", fmt.Errorf("failed to set context: %w", err)
+		}
 
-	// Get the computed context back as it might have been modified by the inline script
-	localComputed = getComputedContext(vm)
+		evaluated, replacedLines, err := t.evaluateInlineScripts(vm, name, input)
+		if err != nil {
+			return "", err
+		}
 
-	tmplCtx := &tmplContext{
-		Global:         context.Global,
-		Local:          context.Local,
-		GlobalComputed: context.GlobalComputed.Export(),
-		LocalComputed:  localComputed.Export(),
-	}
+		// Get the computed context back as it might have been modified by the inline script
+		localComputed = getComputedContext(vm)
 
-	out, err = t.execTemplate(name, evaluated, tmplCtx, replacedLines)
-	if err != nil {
-		return "", err
+		tmplCtx := &tmplContext{
+			Global:         context.Global,
+			Local:          context.Local,
+			GlobalComputed: context.GlobalComputed.Export(),
+			LocalComputed:  localComputed.Export(),
+		}
+
+		out, err = t.execTemplate(name, evaluated, tmplCtx, replacedLines)
+		if err != nil {
+			return "", err
+		}
+
+		// Set the output as the input for the next iteration and update the computed context
+		input = out
+		localComputed = getComputedContext(vm)
 	}
 
 	// Reset the context back to the previous one
@@ -213,7 +243,7 @@ func getComputedContext(vm VM) goja.Value {
 func (t *Templator) execTemplate(name string, tmplContent string, data any, replacedLines int) (string, error) {
 	tmp, err := template.New(name).Funcs(t.TmplFuncs).Parse(tmplContent)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse template: %w", err)
+		return "", fmt.Errorf("failed to parse template: %w\n----------------------------\n%s\n----------------------------", err, tmplContent)
 	}
 
 	var buf bytes.Buffer

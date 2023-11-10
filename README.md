@@ -132,6 +132,10 @@ A number of methods are available to start the engine, including:
   * `templateFile` (string) - The path to the template file to start the engine from.
   * `data` (any) - Context data to provide to templates and scripts. Available as `{{.Global}}` in templates and `context.Global` in scripts.
 
+Note: there are also version of the above methods that have a `Multiple` suffix, these methods will render the template multiple times (based on numTimes argument),
+each template run will have access to the same LocalComputed context allowing for data to be accumulated across runs and rendered out later. Examples of this can be
+found in the `testdata/templates/testMultiple.stmpl` file.
+
 ### Controlling the flow of templating
 
 The engine allows you to control the flow of templating from within templates and scripts themselves. This means from a single entry point you can start multiple templates and scripts.
@@ -145,12 +149,21 @@ This is done by calling the following functions from within templates and script
 * `templateString(templateFile string, data any) (string, error)` - Start a template file and return the rendered template as a string.
   * `templateFile` (string) - The path to the template file to start the engine from.
   * `data` (any) - Context data to provide to templates and scripts. Available as `{{.Local}}` in templates and `context.Local` in scripts.
+* `templateStringInput(templateName string, templateString string, data any) (string, error)` - Template the input string and return the rendered template as a string.
+  * `templateName` (string) - The name of the template to render.
+  * `templateString` (string) - An input template string to template.
+  * `data` (any) - Context data to provide to templates and scripts. Available as `{{.Local}}` in templates and `context.Local` in scripts.
+
+Note: there are also version of the above methods that have a `Multiple` suffix, these methods will render the template multiple times (based on numTimes argument),
+each template run will have access to the same LocalComputed context allowing for data to be accumulated across runs and rendered out later. Examples of this can be
+found in the `testdata/templates/testMultiple.stmpl` file.
 
 This allows for example:
 
 ```gotemplate
 {{ templateFile "tmpl.stmpl" "out.txt" .Local }}{{/* Template another file */}}
 {{ templateString "tmpl.stmpl" .Local }}{{/* Template another file and include the rendered output in this templates rendered output */}}
+{{ templateStringInput "Hello {{ .Local.name }}" .Local }}{{/* Template a string and include the rendered output in this templates rendered output */}}
 ```
 
 ### Registering templating functions
@@ -184,8 +197,9 @@ sjs```
 The `sjs` snippet can be used anywhere within your template (including multiple snippets) and will be replaced with any "rendered" output returned when using the `render` function.
 
 Naive transformation of typescript code is supported through [esbuild](https://esbuild.github.io/api/#transformation). This means that you can directly import typescript code and use type annotations in place of any JavaScript. However, be aware:
- * EasyTemplate will not perform type checking itself. Type annotations are transformed into commented out code.  
- * Scripts/Snippets are not bundled, but executed as a single module on the global scope. This means no `import` statements are possible. [Instead, the global `require` function](#importing-javascript) is available to directly execute JS/TS code.   
+
+* EasyTemplate will not perform type checking itself. Type annotations are transformed into commented out code.  
+* Scripts/Snippets are not bundled, but executed as a single module on the global scope. This means no `import` statements are possible. [Instead, the global `require` function](#importing-javascript) is available to directly execute JS/TS code.
 
 ### Context data
 
@@ -305,6 +319,10 @@ The following functions are available to JavaScript from the templating engine:
 * `templateString(templateString, data)` - Render a template and return the rendered output.
   * `templateString` (string) - The template string to render.
   * `data` (object) - Data available to the template as `Local` context ie `{name: "John"}` is available as `{{ .Local.name }}`.
+* `templateStringInput(templateName, templateString, data)` - Render a template and return the rendered output.
+  * `templateName` (string) - The name of the template to render.
+  * `templateString` (string) - The template string to render.
+  * `data` (object) - Data available to the template as `Local` context ie `{name: "John"}` is available as `{{ .Local.name }}`.
 * `render(output)` - Render the output to the template file, if called multiples times the output will be appended to the previous output as a new line. The cumulative output will replace the current `sjs` block in the template file.
   * `output` (string) - The output to render.
 * `require(filePath)` - Import a JavaScript file into the global scope.
@@ -312,3 +330,7 @@ The following functions are available to JavaScript from the templating engine:
 * `registerTemplateFunc(name, func)` - Register a template function to be used in the template files.
   * `name` (string) - The name of the function to register.
   * `func` (function) - The function to register.
+
+Note: there are also versions of the above template methods that have a `Multiple` suffix, these methods will render the template multiple times (based on numTimes argument),
+each template run will have access to the same LocalComputed context allowing for data to be accumulated across runs and rendered out later. Examples of this can be
+found in the `testdata/templates/testMultiple.stmpl` file.

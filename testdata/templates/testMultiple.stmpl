@@ -1,0 +1,10 @@
+{{"{{\"{{.LocalComputed.AccumulatedString}}\"}}"}}{{/* Double escaped so it will unfurl fully by the third iteration to template*/}}
+```sjs
+if (!context.LocalComputed.AccumulatedString) {
+    context.LocalComputed.AccumulatedString = "";
+}
+context.LocalComputed.AccumulatedString += "Hello World";
+sjs```
+{{"```"}}{{"sjs"}}{{/* Escaped so it will only be executed on the second iteration */}}
+context.LocalComputed.AccumulatedString += " it's a wonderful day!";
+{{"sjs"}}{{"```"}}

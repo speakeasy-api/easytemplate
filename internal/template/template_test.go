@@ -58,8 +58,8 @@ func TestTemplator_TemplateFile_Success(t *testing.T) {
 			vm.EXPECT().Run("localCreateComputedContextObject", `createComputedContextObject();`).Return(goja.Undefined(), nil).Times(1)
 			vm.EXPECT().Get("context").Return(goja.Undefined()).Times(1)
 			vm.EXPECT().Set("context", context).Return(nil).Times(1)
-			vm.EXPECT().Get("context").Return(contextVal).Times(1)
-			vm.EXPECT().ToObject(contextVal).Return(contextVal.ToObject(o)).Times(1)
+			vm.EXPECT().Get("context").Return(contextVal).Times(2)
+			vm.EXPECT().ToObject(contextVal).Return(contextVal.ToObject(o)).Times(2)
 			vm.EXPECT().Set("context", goja.Undefined()).Return(nil).Times(1)
 
 			tr := &template.Templator{
@@ -165,8 +165,8 @@ func TestTemplator_TemplateString_Success(t *testing.T) {
 				vm.EXPECT().Set("render", goja.Undefined()).Return(nil).Times(1)
 			}
 
-			vm.EXPECT().Get("context").Return(contextVal).Times(1)
-			vm.EXPECT().ToObject(contextVal).Return(contextVal.ToObject(o)).Times(1)
+			vm.EXPECT().Get("context").Return(contextVal).Times(2)
+			vm.EXPECT().ToObject(contextVal).Return(contextVal.ToObject(o)).Times(2)
 			vm.EXPECT().Set("context", goja.Undefined()).Return(nil).Times(1)
 
 			tr := &template.Templator{
