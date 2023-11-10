@@ -4,4 +4,4 @@ from test.js
 34.000
 Hello User
 Hello World it's a wonderful day!
-
+Hello World it's a wonderful day! (Isolated)
