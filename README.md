@@ -331,6 +331,6 @@ The following functions are available to JavaScript from the templating engine:
   * `name` (string) - The name of the function to register.
   * `func` (function) - The function to register.
 
-Note: there are also versions of the above template methods that have a `Multiple` suffix, these methods will render the template multiple times (based on numTimes argument),
+Note: there are also versions of the above template methods that have a `Multiple` suffix, these methods will render the template multiple times (based on the `numTimes` argument),
 each template run will have access to the same LocalComputed context allowing for data to be accumulated across runs and rendered out later. Examples of this can be
 found in the `testdata/templates/testMultiple.stmpl` file.
