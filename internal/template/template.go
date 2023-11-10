@@ -279,17 +279,18 @@ func (t *Templator) Recurse(vm VM, numTimes int) (out string, err error) {
 	return RecurseCanary()[numTimes-1], nil
 }
 
-func (t *Templator) applyRecurseCanary(input string, recurseCount int) (string, int) {
+func (t *Templator) applyRecurseCanary(input string, execCount int) (string, int) {
 	canaryList := RecurseCanary()
 	for i, canary := range canaryList {
 		if strings.Contains(input, canary) {
-			// max of recurseCount, len(canaryList) - i
-			recurseCount = int(math.Max(float64(recurseCount), float64(i+2)))
+			// recurse 1 means canary[0] is found, and execCount is now 2
+			// if more than 1 "recurse" invocation in template, use the largest
+			execCount = int(math.Max(float64(execCount), float64(i+2)))
 		}
 		input = strings.ReplaceAll(input, canary, "")
 	}
 
-	return input, recurseCount
+	return input, execCount
 }
 
 func adjustLineNumber(name string, err error, replacedLines int) error {
