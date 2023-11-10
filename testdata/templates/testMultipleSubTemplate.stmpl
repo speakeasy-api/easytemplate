@@ -1,0 +1,4 @@
+I'm a sub template that will add to my parents template recursive context
+```sjs
+context.RecursiveComputed.AccumulatedString += " it's a wonderful day!";
+sjs```

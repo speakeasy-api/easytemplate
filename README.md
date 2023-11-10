@@ -145,13 +145,37 @@ This is done by calling the following functions from within templates and script
 * `templateString(templateFile string, data any) (string, error)` - Start a template file and return the rendered template as a string.
   * `templateFile` (string) - The path to the template file to start the engine from.
   * `data` (any) - Context data to provide to templates and scripts. Available as `{{.Local}}` in templates and `context.Local` in scripts.
+* `templateStringInput(templateName string, templateString string, data any) (string, error)` - Template the input string and return the rendered template as a string.
+  * `templateName` (string) - The name of the template to render.
+  * `templateString` (string) - An input template string to template.
+  * `data` (any) - Context data to provide to templates and scripts. Available as `{{.Local}}` in templates and `context.Local` in scripts.
+* `recurse(recursions int) string` - Recurse the current template file, recursions is the number of times to recurse the template file.
+  * `recursions` (int) - The number of times to recurse the template file.
 
 This allows for example:
 
 ```gotemplate
 {{ templateFile "tmpl.stmpl" "out.txt" .Local }}{{/* Template another file */}}
 {{ templateString "tmpl.stmpl" .Local }}{{/* Template another file and include the rendered output in this templates rendered output */}}
+{{ templateStringInput "Hello {{ .Local.name }}" .Local }}{{/* Template a string and include the rendered output in this templates rendered output */}}
 ```
+
+#### Recursive templating
+
+It is possible with the `recurse` function in a template to render the same template multiple times. This can be useful when data to render parts of the template are only available after you have rendered it at least once.
+
+For example:
+
+```go
+{{- recurse 1 -}}
+{{"{{.RecursiveComputed.Names}}"}}{{/* Render the names of the customers after we have iterated over them later */}}
+{{range .Local.Customers}}
+{{- addName .RecursiveComputed.Names (print .FirstName " " .LastName) -}}
+{{.FirstName}} {{.LastName}}
+{{end}}
+```
+
+Note: The `recurse` function must be called as the first thing in the template on its own line.
 
 ### Registering templating functions
 
@@ -184,8 +208,9 @@ sjs```
 The `sjs` snippet can be used anywhere within your template (including multiple snippets) and will be replaced with any "rendered" output returned when using the `render` function.
 
 Naive transformation of typescript code is supported through [esbuild](https://esbuild.github.io/api/#transformation). This means that you can directly import typescript code and use type annotations in place of any JavaScript. However, be aware:
- * EasyTemplate will not perform type checking itself. Type annotations are transformed into commented out code.  
- * Scripts/Snippets are not bundled, but executed as a single module on the global scope. This means no `import` statements are possible. [Instead, the global `require` function](#importing-javascript) is available to directly execute JS/TS code.   
+
+* EasyTemplate will not perform type checking itself. Type annotations are transformed into commented out code.  
+* Scripts/Snippets are not bundled, but executed as a single module on the global scope. This means no `import` statements are possible. [Instead, the global `require` function](#importing-javascript) is available to directly execute JS/TS code.
 
 ### Context data
 
@@ -303,6 +328,10 @@ The following functions are available to JavaScript from the templating engine:
   * `outFilePath` (string) - The path to the output file to render to.
   * `data` (object) - Data available to the template as `Local` context ie `{name: "John"}` is available as `{{ .Local.name }}`.
 * `templateString(templateString, data)` - Render a template and return the rendered output.
+  * `templateString` (string) - The template string to render.
+  * `data` (object) - Data available to the template as `Local` context ie `{name: "John"}` is available as `{{ .Local.name }}`.
+* `templateStringInput(templateName, templateString, data)` - Render a template and return the rendered output.
+  * `templateName` (string) - The name of the template to render.
   * `templateString` (string) - The template string to render.
   * `data` (object) - Data available to the template as `Local` context ie `{name: "John"}` is available as `{{ .Local.name }}`.
 * `render(output)` - Render the output to the template file, if called multiples times the output will be appended to the previous output as a new line. The cumulative output will replace the current `sjs` block in the template file.

@@ -1,0 +1,13 @@
+{{- recurse 2 -}}
+{{"{{\"{{.RecursiveComputed.AccumulatedString}}\"}}"}}{{/* Double escaped so it will unfurl fully by the third iteration to template*/}}
+```sjs
+if (!context.RecursiveComputed.AccumulatedString) {
+    context.RecursiveComputed.AccumulatedString = "";
+}
+context.RecursiveComputed.AccumulatedString += "Hello World";
+sjs```
+{{- "```"}}{{"sjs"}}{{/* Escaped so it will only be executed on the second iteration */}}
+context.RecursiveComputed.AccumulatedString += " The End!";
+{{"sjs"}}{{"```"}}
+{{templateString "templates/recursiveSubTemplate.stmpl" nil}}
+{{templateString "templates/testMultipleSubTemplate.stmpl" nil}}
