@@ -226,7 +226,7 @@ func (e *Engine) RunTemplateStringInput(name, template string, data any) (string
 	return e.templator.TemplateStringInput(vm, name, template, data)
 }
 
-//nolint:funlen,cyclop,gocognit
+//nolint:funlen
 func (e *Engine) init(data any) (*vm.VM, error) {
 	if e.ran {
 		return nil, ErrAlreadyRan
