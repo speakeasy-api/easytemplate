@@ -132,7 +132,7 @@ A number of methods are available to start the engine, including:
   * `templateFile` (string) - The path to the template file to start the engine from.
   * `data` (any) - Context data to provide to templates and scripts. Available as `{{.Global}}` in templates and `context.Global` in scripts.
 
-Note: there are also version of the above methods that have a `Multiple` suffix, these methods will render the template multiple times (based on numTimes argument),
+Note: there are also versions of the above methods that have a `Multiple` suffix, these methods will render the template multiple times (based on the `numTimes` argument),
 each template run will have access to the same LocalComputed context allowing for data to be accumulated across runs and rendered out later. Examples of this can be
 found in the `testdata/templates/testMultiple.stmpl` file.
 
