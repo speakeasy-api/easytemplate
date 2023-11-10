@@ -3,5 +3,7 @@ from test.js
 
 34.000
 Hello User
-Hello World it's a wonderful day!
-Hello World it's a wonderful day! (Isolated)
+Hello World it's a wonderful day! The End!
+A recursive template with its own scope
+I have my own recursive scope!
+I'm a sub template that will add to my parents template recursive context

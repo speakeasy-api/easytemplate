@@ -8,6 +8,7 @@ import (
 	"github.com/speakeasy-api/easytemplate/internal/template"
 	"github.com/speakeasy-api/easytemplate/internal/template/mocks"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTemplator_TemplateFile_Success(t *testing.T) {
@@ -47,19 +48,20 @@ func TestTemplator_TemplateFile_Success(t *testing.T) {
 			vm := mocks.NewMockVM(ctrl)
 
 			context := &template.Context{
-				Global:         tt.fields.contextData,
-				GlobalComputed: goja.Undefined(),
-				Local:          tt.args.inputData,
-				LocalComputed:  goja.Undefined(),
+				Global:            tt.fields.contextData,
+				GlobalComputed:    goja.Undefined(),
+				Local:             tt.args.inputData,
+				LocalComputed:     goja.Undefined(),
+				RecursiveComputed: goja.Undefined(),
 			}
 			o := goja.New()
 			contextVal := o.ToValue(context)
 
 			vm.EXPECT().Run("localCreateComputedContextObject", `createComputedContextObject();`).Return(goja.Undefined(), nil).Times(1)
-			vm.EXPECT().Get("context").Return(goja.Undefined()).Times(1)
+			vm.EXPECT().Get("context").Return(goja.Undefined()).Times(2)
 			vm.EXPECT().Set("context", context).Return(nil).Times(1)
-			vm.EXPECT().Get("context").Return(contextVal).Times(2)
-			vm.EXPECT().ToObject(contextVal).Return(contextVal.ToObject(o)).Times(2)
+			vm.EXPECT().Get("context").Return(contextVal).Times(1)
+			vm.EXPECT().ToObject(contextVal).Return(contextVal.ToObject(o)).Times(1)
 			vm.EXPECT().Set("context", goja.Undefined()).Return(nil).Times(1)
 
 			tr := &template.Templator{
@@ -75,7 +77,7 @@ func TestTemplator_TemplateFile_Success(t *testing.T) {
 			}
 			tr.SetContextData(tt.fields.contextData, goja.Undefined())
 			err := tr.TemplateFile(vm, tt.args.templatePath, tt.args.outFile, tt.args.inputData)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		})
 	}
 }
@@ -146,16 +148,17 @@ func TestTemplator_TemplateString_Success(t *testing.T) {
 			vm := mocks.NewMockVM(ctrl)
 
 			context := &template.Context{
-				Global:         tt.fields.contextData,
-				GlobalComputed: goja.Undefined(),
-				Local:          tt.args.inputData,
-				LocalComputed:  goja.Undefined(),
+				Global:            tt.fields.contextData,
+				GlobalComputed:    goja.Undefined(),
+				Local:             tt.args.inputData,
+				LocalComputed:     goja.Undefined(),
+				RecursiveComputed: goja.Undefined(),
 			}
 			o := goja.New()
 			contextVal := o.ToValue(context)
 
 			vm.EXPECT().Run("localCreateComputedContextObject", `createComputedContextObject();`).Return(goja.Undefined(), nil).Times(1)
-			vm.EXPECT().Get("context").Return(goja.Undefined()).Times(1)
+			vm.EXPECT().Get("context").Return(goja.Undefined()).Times(2)
 			vm.EXPECT().Set("context", context).Return(nil).Times(1)
 
 			if tt.fields.includedJS != "" {
@@ -165,8 +168,8 @@ func TestTemplator_TemplateString_Success(t *testing.T) {
 				vm.EXPECT().Set("render", goja.Undefined()).Return(nil).Times(1)
 			}
 
-			vm.EXPECT().Get("context").Return(contextVal).Times(2)
-			vm.EXPECT().ToObject(contextVal).Return(contextVal.ToObject(o)).Times(2)
+			vm.EXPECT().Get("context").Return(contextVal).Times(1)
+			vm.EXPECT().ToObject(contextVal).Return(contextVal.ToObject(o)).Times(1)
 			vm.EXPECT().Set("context", goja.Undefined()).Return(nil).Times(1)
 
 			tr := &template.Templator{
@@ -178,7 +181,7 @@ func TestTemplator_TemplateString_Success(t *testing.T) {
 			}
 			tr.SetContextData(tt.fields.contextData, goja.Undefined())
 			out, err := tr.TemplateString(vm, tt.args.templatePath, tt.args.inputData)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, tt.wantOut, out)
 		})
 	}

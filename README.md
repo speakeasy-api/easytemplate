@@ -132,10 +132,6 @@ A number of methods are available to start the engine, including:
   * `templateFile` (string) - The path to the template file to start the engine from.
   * `data` (any) - Context data to provide to templates and scripts. Available as `{{.Global}}` in templates and `context.Global` in scripts.
 
-Note: there are also versions of the above methods that have a `Multiple` suffix, these methods will render the template multiple times (based on the `numTimes` argument),
-each template run will have access to the same LocalComputed context allowing for data to be accumulated across runs and rendered out later. Examples of this can be
-found in the `testdata/templates/testMultiple.stmpl` file.
-
 ### Controlling the flow of templating
 
 The engine allows you to control the flow of templating from within templates and scripts themselves. This means from a single entry point you can start multiple templates and scripts.
@@ -153,10 +149,8 @@ This is done by calling the following functions from within templates and script
   * `templateName` (string) - The name of the template to render.
   * `templateString` (string) - An input template string to template.
   * `data` (any) - Context data to provide to templates and scripts. Available as `{{.Local}}` in templates and `context.Local` in scripts.
-
-Note: there are also versions of the above methods that have a `Multiple` suffix, these methods will render the template multiple times (based on the `numTimes` argument),
-each template run will have access to the same LocalComputed context allowing for data to be accumulated across runs and rendered out later. Examples of this can be
-found in the `testdata/templates/testMultiple.stmpl` file.
+* `recurse(recursions int) string` - Recurse the current template file, recursions is the number of times to recurse the template file.
+  * `recursions` (int) - The number of times to recurse the template file.
 
 This allows for example:
 
@@ -164,6 +158,19 @@ This allows for example:
 {{ templateFile "tmpl.stmpl" "out.txt" .Local }}{{/* Template another file */}}
 {{ templateString "tmpl.stmpl" .Local }}{{/* Template another file and include the rendered output in this templates rendered output */}}
 {{ templateStringInput "Hello {{ .Local.name }}" .Local }}{{/* Template a string and include the rendered output in this templates rendered output */}}
+```
+
+#### Recursive templating
+
+It is possible with the `recurse` function in a template to render the same template multiple times. This can be useful when data to render parts of the template are only available after you have rendered it at least once.
+
+For example:
+
+```go
+{{- recurse 1 -}}
+{{"{{.L}}"}}
+{{ }}
+
 ```
 
 ### Registering templating functions
@@ -330,7 +337,3 @@ The following functions are available to JavaScript from the templating engine:
 * `registerTemplateFunc(name, func)` - Register a template function to be used in the template files.
   * `name` (string) - The name of the function to register.
   * `func` (function) - The function to register.
-
-Note: there are also versions of the above template methods that have a `Multiple` suffix, these methods will render the template multiple times (based on the `numTimes` argument),
-each template run will have access to the same LocalComputed context allowing for data to be accumulated across runs and rendered out later. Examples of this can be
-found in the `testdata/templates/testMultiple.stmpl` file.

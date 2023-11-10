@@ -128,16 +128,13 @@ func New(opts ...Opt) *Engine {
 	t.ReadFunc = e.readFile
 
 	e.jsFuncs = map[string]func(call CallContext) goja.Value{
-		"require":                     e.require,
-		"recurse":                     e.recurseJS,
-		"templateFile":                e.templateFileJS,
-		"templateFileMultiple":        e.templateFileMultipleJS,
-		"templateString":              e.templateStringJS,
-		"templateStringMultiple":      e.templateStringMultipleJS,
-		"templateStringInput":         e.templateStringInputJS,
-		"templateStringInputMultiple": e.templateStringInputMultipleJS,
-		"registerTemplateFunc":        e.registerTemplateFunc,
-		"unregisterTemplateFunc":      e.unregisterTemplateFunc,
+		"require":                e.require,
+		"recurse":                e.recurseJS,
+		"templateFile":           e.templateFileJS,
+		"templateString":         e.templateStringJS,
+		"templateStringInput":    e.templateStringInputJS,
+		"registerTemplateFunc":   e.registerTemplateFunc,
+		"unregisterTemplateFunc": e.unregisterTemplateFunc,
 	}
 
 	for _, opt := range opts {
@@ -209,17 +206,6 @@ func (e *Engine) RunTemplate(templateFile string, outFile string, data any) erro
 	return e.templator.TemplateFile(vm, templateFile, outFile, data)
 }
 
-// RunTemplateMultiple runs the provided template file numTimes, with the provided data, starting the template engine and templating the provided template to a file.
-// The same LocalComputed context is available to each run.
-func (e *Engine) RunTemplateMultiple(templateFile string, outFile string, data any, numTimes int) error {
-	vm, err := e.init(data)
-	if err != nil {
-		return err
-	}
-
-	return e.templator.TemplateFileMultiple(vm, templateFile, outFile, data, numTimes)
-}
-
 // RunTemplateString runs the provided template file, with the provided data, starting the template engine and templating the provided template, returning the rendered result.
 func (e *Engine) RunTemplateString(templateFile string, data any) (string, error) {
 	vm, err := e.init(data)
@@ -230,17 +216,6 @@ func (e *Engine) RunTemplateString(templateFile string, data any) (string, error
 	return e.templator.TemplateString(vm, templateFile, data)
 }
 
-// RunTemplateStringMultiple runs the provided template file numTimes, with the provided data, starting the template engine and templating the provided template, returning the rendered result.
-// The same LocalComputed context is available to each run.
-func (e *Engine) RunTemplateStringMultiple(templateFile string, data any, numTimes int) (string, error) {
-	vm, err := e.init(data)
-	if err != nil {
-		return "", err
-	}
-
-	return e.templator.TemplateStringMultiple(vm, templateFile, data, numTimes)
-}
-
 // RunTemplateStringInput runs the provided input template string, with the provided data, starting the template engine and templating the provided template, returning the rendered result.
 func (e *Engine) RunTemplateStringInput(name, template string, data any) (string, error) {
 	vm, err := e.init(data)
@@ -248,18 +223,7 @@ func (e *Engine) RunTemplateStringInput(name, template string, data any) (string
 		return "", err
 	}
 
-	return e.templator.TemplateStringInput(vm, name, template, data, 1)
-}
-
-// RunTemplateStringInputMultiple runs the provided input template string numTimes, with the provided data, starting the template engine and templating the provided template, returning the rendered result.
-// The same LocalComputed context is available to each run.
-func (e *Engine) RunTemplateStringInputMultiple(name, template string, data any, numTimes int) (string, error) {
-	vm, err := e.init(data)
-	if err != nil {
-		return "", err
-	}
-
-	return e.templator.TemplateStringInput(vm, name, template, data, numTimes)
+	return e.templator.TemplateStringInput(vm, name, template, data)
 }
 
 //nolint:funlen,cyclop,gocognit
@@ -307,16 +271,6 @@ func (e *Engine) init(data any) (*vm.VM, error) {
 			return "", nil
 		}
 	}(v)
-	e.templator.TmplFuncs["templateFileMultiple"] = func(v *vm.VM) func(string, string, any, int) (string, error) {
-		return func(templateFile, outFile string, data any, numTimes int) (string, error) {
-			err := e.templator.TemplateFileMultiple(v, templateFile, outFile, data, numTimes)
-			if err != nil {
-				return "", err
-			}
-
-			return "", nil
-		}
-	}(v)
 	e.templator.TmplFuncs["templateString"] = func(v *vm.VM) func(string, any) (string, error) {
 		return func(templateFile string, data any) (string, error) {
 			templated, err := e.templator.TemplateString(v, templateFile, data)
@@ -327,29 +281,9 @@ func (e *Engine) init(data any) (*vm.VM, error) {
 			return templated, nil
 		}
 	}(v)
-	e.templator.TmplFuncs["templateStringMultiple"] = func(v *vm.VM) func(string, any, int) (string, error) {
-		return func(templateFile string, data any, numTimes int) (string, error) {
-			templated, err := e.templator.TemplateStringMultiple(v, templateFile, data, numTimes)
-			if err != nil {
-				return "", err
-			}
-
-			return templated, nil
-		}
-	}(v)
 	e.templator.TmplFuncs["templateStringInput"] = func(v *vm.VM) func(string, string, any) (string, error) {
 		return func(name, template string, data any) (string, error) {
-			templated, err := e.templator.TemplateStringInput(v, name, template, data, 1)
-			if err != nil {
-				return "", err
-			}
-
-			return templated, nil
-		}
-	}(v)
-	e.templator.TmplFuncs["templateStringInputMultiple"] = func(v *vm.VM) func(string, string, any, int) (string, error) {
-		return func(name, template string, data any, numTimes int) (string, error) {
-			templated, err := e.templator.TemplateStringInput(v, name, template, data, numTimes)
+			templated, err := e.templator.TemplateStringInput(v, name, template, data)
 			if err != nil {
 				return "", err
 			}

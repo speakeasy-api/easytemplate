@@ -6,7 +6,6 @@ package template
 import (
 	"bytes"
 	"fmt"
-	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -28,17 +27,19 @@ var sjsRegex = regexp.MustCompile("(?ms)(```sjs\\s*\\n*(.*?)sjs```)")
 
 // Context is the context that is passed templates or js.
 type Context struct {
-	Global         any
-	Local          any
-	GlobalComputed goja.Value
-	LocalComputed  goja.Value
+	Global            any
+	Local             any
+	GlobalComputed    goja.Value
+	LocalComputed     goja.Value
+	RecursiveComputed goja.Value
 }
 
 type tmplContext struct {
-	Global         any
-	Local          any
-	GlobalComputed any
-	LocalComputed  any
+	Global            any
+	Local             any
+	GlobalComputed    any
+	LocalComputed     any
+	RecursiveComputed any
 }
 
 // VM represents a virtual machine that can be used to run js.
@@ -78,20 +79,6 @@ func (t *Templator) TemplateFile(vm VM, templateFile, outFile string, inputData 
 	return nil
 }
 
-// TemplateFileMultiple will template the provided file numTimes and write the output to outFile.
-func (t *Templator) TemplateFileMultiple(vm VM, templateFile, outFile string, inputData any, numTimes int) error {
-	output, err := t.TemplateStringMultiple(vm, templateFile, inputData, numTimes)
-	if err != nil {
-		return err
-	}
-
-	if err := t.WriteFunc(outFile, []byte(output)); err != nil {
-		return fmt.Errorf("failed to write file %s: %w", outFile, err)
-	}
-
-	return nil
-}
-
 type inlineScriptContext struct {
 	renderedContent []string
 }
@@ -115,21 +102,11 @@ func (t *Templator) TemplateString(vm VM, templatePath string, inputData any) (o
 		return "", fmt.Errorf("failed to read template file: %w", err)
 	}
 
-	return t.TemplateStringInput(vm, templatePath, string(data), inputData, 1)
-}
-
-// TemplateStringMultiple will template the provided file numTimes and return the output as a string.
-func (t *Templator) TemplateStringMultiple(vm VM, templatePath string, inputData any, numTimes int) (out string, err error) {
-	data, err := t.ReadFunc(templatePath)
-	if err != nil {
-		return "", fmt.Errorf("failed to read template file: %w", err)
-	}
-
-	return t.TemplateStringInput(vm, templatePath, string(data), inputData, numTimes)
+	return t.TemplateStringInput(vm, templatePath, string(data), inputData)
 }
 
 // TemplateStringInput will template the provided input string and return the output as a string.
-func (t *Templator) TemplateStringInput(vm VM, name string, input string, inputData any, numTimes int) (out string, err error) {
+func (t *Templator) TemplateStringInput(vm VM, name string, input string, inputData any) (out string, err error) {
 	defer func() {
 		if e := recover(); e != nil {
 			err = fmt.Errorf("failed to render template: %s", e)
@@ -143,12 +120,29 @@ func (t *Templator) TemplateStringInput(vm VM, name string, input string, inputD
 
 	currentContext := vm.Get("context")
 
-	for i := 0; i < numTimes; i++ {
+	currentRecursiveComputed := getRecursiveComputedContext(vm)
+	localRecursiveComputed := currentRecursiveComputed
+
+	numIterations := 1
+	numRecursions, err := t.isRecursiveTemplate(input)
+	if err != nil {
+		return "", err
+	}
+	if numRecursions > 0 {
+		numIterations = numRecursions + 1
+		localRecursiveComputed, err = vm.Run("recursiveCreateComputedContextObject", `createComputedContextObject();`)
+		if err != nil {
+			return "", utils.HandleJSError("failed to create recursive computed context", err)
+		}
+	}
+
+	for i := 0; i < numIterations; i++ {
 		context := &Context{
-			Global:         t.contextData,
-			GlobalComputed: t.globalComputed,
-			Local:          inputData,
-			LocalComputed:  localComputed,
+			Global:            t.contextData,
+			GlobalComputed:    t.globalComputed,
+			Local:             inputData,
+			LocalComputed:     localComputed,
+			RecursiveComputed: localRecursiveComputed,
 		}
 
 		if err := vm.Set("context", context); err != nil {
@@ -161,13 +155,14 @@ func (t *Templator) TemplateStringInput(vm VM, name string, input string, inputD
 		}
 
 		// Get the computed context back as it might have been modified by the inline script
-		localComputed = getComputedContext(vm)
+		localComputed = getLocalComputedContext(vm)
 
 		tmplCtx := &tmplContext{
-			Global:         context.Global,
-			Local:          context.Local,
-			GlobalComputed: context.GlobalComputed.Export(),
-			LocalComputed:  localComputed.Export(),
+			Global:            context.Global,
+			Local:             context.Local,
+			GlobalComputed:    context.GlobalComputed.Export(),
+			LocalComputed:     localComputed.Export(),
+			RecursiveComputed: localRecursiveComputed.Export(),
 		}
 
 		out, err = t.execTemplate(name, evaluated, tmplCtx, replacedLines)
@@ -176,11 +171,16 @@ func (t *Templator) TemplateStringInput(vm VM, name string, input string, inputD
 		}
 
 		// Set the output as the input for the next iteration and update the computed context
-		input = out
-		if i == 0 {
-			input, numTimes = t.applyRecurseCanary(input, numTimes)
+		var cont bool
+		input, cont, err = t.applyRecurseCanary(out)
+		if err != nil {
+			return "", err
 		}
-		localComputed = getComputedContext(vm)
+		// If the output is the same as the input, or no canary found, we don't need to continue
+		if !cont || evaluated == out {
+			break
+		}
+		localRecursiveComputed = getRecursiveComputedContext(vm)
 	}
 
 	// Reset the context back to the previous one
@@ -235,11 +235,22 @@ func (t *Templator) execSJSBlock(v VM, js, templatePath string, jsBlockLineNumbe
 	return strings.Join(c.renderedContent, "\n"), nil
 }
 
-func getComputedContext(vm VM) goja.Value {
+func getLocalComputedContext(vm VM) goja.Value {
 	// Get the local context back as it might have been modified by the inline script
 	contextVal := vm.Get("context")
 
 	computedVal := vm.ToObject(contextVal).Get("LocalComputed")
+
+	return computedVal
+}
+
+func getRecursiveComputedContext(vm VM) goja.Value {
+	contextVal := vm.Get("context")
+	if contextVal == goja.Undefined() {
+		return goja.Undefined()
+	}
+
+	computedVal := vm.ToObject(contextVal).Get("RecursiveComputed")
 
 	return computedVal
 }
@@ -260,38 +271,72 @@ func (t *Templator) execTemplate(name string, tmplContent string, data any, repl
 	return buf.String(), nil
 }
 
-func recurseCanary() []string {
-	return []string{
-		"5f9c88133f5cc60a84009b841192a2d8f83dd901e8112fe77284e461b4039ccd",
-		"f34e13e176147bebc0e4d644fd45d5727462c3b574b3ffc00df1b4683c15e54c",
-		"6f6fd98465b1ef727f0692a3d08f70cb4b94ab987a97d0ee206d3d33d2032887",
-		"f1cd9fe131302d6f37b17084fa8b7679debb6bff79853171e439483bbc2cb846",
-		"2290a2c385c9f40a2af9f56095630ab8b80e067cdf8fc92beef93c2b16c2b8aa",
-	}
-}
-
 // Recurse will let the engine know how many times the template should execute.
 func (t *Templator) Recurse(_ VM, numTimes int) (out string, err error) {
-	if numTimes < 1 || numTimes > len(recurseCanary()) {
-		return "", fmt.Errorf("recurse(%v) invalid: %v outside bounds 1..%v", numTimes, numTimes, len(recurseCanary()))
+	if numTimes < 1 {
+		return "", fmt.Errorf("recurse(%d) invalid: must recurse at least once", numTimes)
 	}
 
-	return recurseCanary()[numTimes-1], nil
+	return fmt.Sprintf(canaryPlaceholder, strconv.Itoa(numTimes-1)), nil
 }
 
-func (t *Templator) applyRecurseCanary(input string, execCount int) (string, int) {
-	canaryList := recurseCanary()
-	const recurseArgumentToExecCount = 2
-	for i, canary := range canaryList {
-		if strings.Contains(input, canary) {
-			// recurse 1 means canary[0] is found, and execCount is now 2
-			// if more than 1 "recurse" invocation in template, use the largest
-			execCount = int(math.Max(float64(execCount), float64(i+recurseArgumentToExecCount)))
-		}
-		input = strings.ReplaceAll(input, canary, "")
+var (
+	canaryPlaceholder = "~-~SPEAKEASY_RECURSE_CANARY_%s~-~"
+	canaryRegex       = regexp.MustCompile(fmt.Sprintf(canaryPlaceholder, `(\d+)`))
+	recurseRegex      = regexp.MustCompile(`^{{-* *recurse (\d+) *-*}}$`)
+)
+
+func (t *Templator) isRecursiveTemplate(input string) (int, error) {
+	lines := strings.Split(strings.ReplaceAll(input, "\r\n", "\n"), "\n")
+
+	matches := recurseRegex.FindAllStringSubmatch(lines[0], -1)
+	if len(matches) != 1 {
+		return -1, nil
 	}
 
-	return input, execCount
+	num, err := strconv.Atoi(matches[0][1])
+	if err != nil {
+		return 0, err
+	}
+
+	return num, nil
+}
+
+func (t *Templator) getCanaryNum(input string) (int, error) {
+	matches := canaryRegex.FindAllStringSubmatch(input, -1)
+	if len(matches) == 0 {
+		return -1, nil
+	}
+
+	if len(matches) > 1 {
+		return 0, fmt.Errorf("recurse canary found more than once in template. recurse should only be declared once per template")
+	}
+
+	num, err := strconv.Atoi(matches[0][1])
+	if err != nil {
+		return 0, err
+	}
+
+	return num, nil
+}
+
+func (t *Templator) applyRecurseCanary(input string) (string, bool, error) {
+	num, err := t.getCanaryNum(input)
+	if err != nil {
+		return "", false, err
+	}
+
+	if num == -1 {
+		return input, false, nil
+	}
+
+	replacementString := ""
+
+	if num > 0 {
+		replacementString = fmt.Sprintf(canaryPlaceholder, strconv.Itoa(num-1))
+	}
+
+	return strings.Replace(input, fmt.Sprintf(canaryPlaceholder, strconv.Itoa(num)), replacementString, 1), true, nil
 }
 
 func adjustLineNumber(name string, err error, replacedLines int) error {
