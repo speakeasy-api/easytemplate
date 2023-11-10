@@ -6,6 +6,7 @@ package template
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -176,6 +177,9 @@ func (t *Templator) TemplateStringInput(vm VM, name string, input string, inputD
 
 		// Set the output as the input for the next iteration and update the computed context
 		input = out
+		if i == 0 {
+			input, numTimes = t.applyRecurseCanary(input, numTimes)
+		}
 		localComputed = getComputedContext(vm)
 	}
 
@@ -254,6 +258,38 @@ func (t *Templator) execTemplate(name string, tmplContent string, data any, repl
 	}
 
 	return buf.String(), nil
+}
+
+func RecurseCanary() []string {
+	return []string{
+		"5f9c88133f5cc60a84009b841192a2d8f83dd901e8112fe77284e461b4039ccd",
+		"f34e13e176147bebc0e4d644fd45d5727462c3b574b3ffc00df1b4683c15e54c",
+		"6f6fd98465b1ef727f0692a3d08f70cb4b94ab987a97d0ee206d3d33d2032887",
+		"f1cd9fe131302d6f37b17084fa8b7679debb6bff79853171e439483bbc2cb846",
+		"2290a2c385c9f40a2af9f56095630ab8b80e067cdf8fc92beef93c2b16c2b8aa",
+	}
+}
+
+// Recurse will let the engine know how many times the template should execute
+func (t *Templator) Recurse(vm VM, numTimes int) (out string, err error) {
+	if numTimes < 1 || numTimes > len(RecurseCanary()) {
+		return "", fmt.Errorf("recurse(%v) invalid: %v outside bounds 1..%v", numTimes, numTimes, len(RecurseCanary()))
+	}
+
+	return RecurseCanary()[numTimes-1], nil
+}
+
+func (t *Templator) applyRecurseCanary(input string, recurseCount int) (string, int) {
+	canaryList := RecurseCanary()
+	for i, canary := range canaryList {
+		if strings.Contains(input, canary) {
+			// max of recurseCount, len(canaryList) - i
+			recurseCount = int(math.Max(float64(recurseCount), float64(i+2)))
+		}
+		input = strings.ReplaceAll(input, canary, "")
+	}
+
+	return input, recurseCount
 }
 
 func adjustLineNumber(name string, err error, replacedLines int) error {

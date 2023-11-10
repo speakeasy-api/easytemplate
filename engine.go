@@ -129,6 +129,7 @@ func New(opts ...Opt) *Engine {
 
 	e.jsFuncs = map[string]func(call CallContext) goja.Value{
 		"require":                     e.require,
+		"recurse":                     e.recurseJS,
 		"templateFile":                e.templateFileJS,
 		"templateFileMultiple":        e.templateFileMultipleJS,
 		"templateString":              e.templateStringJS,
@@ -349,6 +350,16 @@ func (e *Engine) init(data any) (*vm.VM, error) {
 	e.templator.TmplFuncs["templateStringInputMultiple"] = func(v *vm.VM) func(string, string, any, int) (string, error) {
 		return func(name, template string, data any, numTimes int) (string, error) {
 			templated, err := e.templator.TemplateStringInput(v, name, template, data, numTimes)
+			if err != nil {
+				return "", err
+			}
+
+			return templated, nil
+		}
+	}(v)
+	e.templator.TmplFuncs["recurse"] = func(v *vm.VM) func(int) (string, error) {
+		return func(numTimes int) (string, error) {
+			templated, err := e.templator.Recurse(v, numTimes)
 			if err != nil {
 				return "", err
 			}

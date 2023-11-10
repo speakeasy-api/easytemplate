@@ -64,6 +64,15 @@ func (e *Engine) templateStringInputJS(call CallContext) goja.Value {
 	return call.VM.ToValue(output)
 }
 
+func (e *Engine) recurseJS(call CallContext) goja.Value {
+	output, err := e.templator.Recurse(call.VM, int(call.Argument(0).ToInteger()))
+	if err != nil {
+		panic(call.VM.NewGoError(err))
+	}
+
+	return call.VM.ToValue(output)
+}
+
 //nolint:gomnd
 func (e *Engine) templateStringInputMultipleJS(call CallContext) goja.Value {
 	name := call.Argument(0).String()
