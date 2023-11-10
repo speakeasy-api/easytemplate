@@ -243,7 +243,7 @@ func getComputedContext(vm VM) goja.Value {
 func (t *Templator) execTemplate(name string, tmplContent string, data any, replacedLines int) (string, error) {
 	tmp, err := template.New(name).Funcs(t.TmplFuncs).Parse(tmplContent)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse template: %w\n----------------------------\n%s\n----------------------------", err, tmplContent)
+		return "", fmt.Errorf("failed to parse template: %w", err)
 	}
 
 	var buf bytes.Buffer
@@ -269,7 +269,7 @@ func adjustLineNumber(name string, err error, replacedLines int) error {
 				return matches[0], nil //nolint:nilerr
 			}
 
-			return strings.Replace(matches[0], matches[1], fmt.Sprintf("%d", currentLineNumber+replacedLines), 1), nil
+			return strings.Replace(matches[0], matches[1], strconv.Itoa(currentLineNumber+replacedLines), 1), nil
 		})
 		if rErr == nil {
 			err = fmt.Errorf(errMsg)
