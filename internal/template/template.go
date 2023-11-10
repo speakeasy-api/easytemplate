@@ -106,6 +106,8 @@ func (t *Templator) TemplateString(vm VM, templatePath string, inputData any) (o
 }
 
 // TemplateStringInput will template the provided input string and return the output as a string.
+//
+//nolint:funlen
 func (t *Templator) TemplateStringInput(vm VM, name string, input string, inputData any) (out string, err error) {
 	defer func() {
 		if e := recover(); e != nil {
