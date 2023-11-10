@@ -168,10 +168,14 @@ For example:
 
 ```go
 {{- recurse 1 -}}
-{{"{{.L}}"}}
-{{ }}
-
+{{"{{.RecursiveComputed.Names}}"}}{{/* Render the names of the customers after we have iterated over them later */}}
+{{range .Local.Customers}}
+{{- addName .RecursiveComputed.Names (print .FirstName " " .LastName) -}}
+{{.FirstName}} {{.LastName}}
+{{end}}
 ```
+
+Note: The `recurse` function must be called as the first thing in the template on its own line.
 
 ### Registering templating functions
 
