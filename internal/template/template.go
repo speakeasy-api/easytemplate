@@ -260,7 +260,7 @@ func (t *Templator) execTemplate(name string, tmplContent string, data any, repl
 	return buf.String(), nil
 }
 
-func RecurseCanary() []string {
+func recurseCanary() []string {
 	return []string{
 		"5f9c88133f5cc60a84009b841192a2d8f83dd901e8112fe77284e461b4039ccd",
 		"f34e13e176147bebc0e4d644fd45d5727462c3b574b3ffc00df1b4683c15e54c",
@@ -270,22 +270,23 @@ func RecurseCanary() []string {
 	}
 }
 
-// Recurse will let the engine know how many times the template should execute
+// Recurse will let the engine know how many times the template should execute.
 func (t *Templator) Recurse(vm VM, numTimes int) (out string, err error) {
-	if numTimes < 1 || numTimes > len(RecurseCanary()) {
-		return "", fmt.Errorf("recurse(%v) invalid: %v outside bounds 1..%v", numTimes, numTimes, len(RecurseCanary()))
+	if numTimes < 1 || numTimes > len(recurseCanary()) {
+		return "", fmt.Errorf("recurse(%v) invalid: %v outside bounds 1..%v", numTimes, numTimes, len(recurseCanary()))
 	}
 
-	return RecurseCanary()[numTimes-1], nil
+	return recurseCanary()[numTimes-1], nil
 }
 
 func (t *Templator) applyRecurseCanary(input string, execCount int) (string, int) {
-	canaryList := RecurseCanary()
+	canaryList := recurseCanary()
+	const recurseArgumentToExecCount = 2
 	for i, canary := range canaryList {
 		if strings.Contains(input, canary) {
 			// recurse 1 means canary[0] is found, and execCount is now 2
 			// if more than 1 "recurse" invocation in template, use the largest
-			execCount = int(math.Max(float64(execCount), float64(i+2)))
+			execCount = int(math.Max(float64(execCount), float64(i+recurseArgumentToExecCount)))
 		}
 		input = strings.ReplaceAll(input, canary, "")
 	}
