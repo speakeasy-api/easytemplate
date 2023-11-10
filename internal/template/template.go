@@ -79,7 +79,7 @@ func (t *Templator) TemplateFile(vm VM, templateFile, outFile string, inputData 
 
 // TemplateFileMultiple will template the provided file numTimes and write the output to outFile.
 func (t *Templator) TemplateFileMultiple(vm VM, templateFile, outFile string, inputData any, numTimes int) error {
-	output, err := t.TemplateString(vm, templateFile, inputData)
+	output, err := t.TemplateStringMultiple(vm, templateFile, inputData, numTimes)
 	if err != nil {
 		return err
 	}

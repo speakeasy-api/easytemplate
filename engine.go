@@ -261,7 +261,7 @@ func (e *Engine) RunTemplateStringInputMultiple(name, template string, data any,
 	return e.templator.TemplateStringInput(vm, name, template, data, numTimes)
 }
 
-//nolint:funlen
+//nolint:funlen,cyclop
 func (e *Engine) init(data any) (*vm.VM, error) {
 	if e.ran {
 		return nil, ErrAlreadyRan
