@@ -154,7 +154,7 @@ This is done by calling the following functions from within templates and script
   * `templateString` (string) - An input template string to template.
   * `data` (any) - Context data to provide to templates and scripts. Available as `{{.Local}}` in templates and `context.Local` in scripts.
 
-Note: there are also version of the above methods that have a `Multiple` suffix, these methods will render the template multiple times (based on numTimes argument),
+Note: there are also versions of the above methods that have a `Multiple` suffix, these methods will render the template multiple times (based on the `numTimes` argument),
 each template run will have access to the same LocalComputed context allowing for data to be accumulated across runs and rendered out later. Examples of this can be
 found in the `testdata/templates/testMultiple.stmpl` file.
 
