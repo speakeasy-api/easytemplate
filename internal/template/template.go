@@ -55,6 +55,7 @@ type Templator struct {
 	WriteFunc      WriteFunc
 	ReadFunc       ReadFunc
 	TmplFuncs      map[string]any
+	Debug          bool
 	contextData    any
 	globalComputed goja.Value
 }
@@ -260,6 +261,9 @@ func getRecursiveComputedContext(vm VM) goja.Value {
 func (t *Templator) execTemplate(name string, tmplContent string, data any, replacedLines int) (string, error) {
 	tmp, err := template.New(name).Funcs(t.TmplFuncs).Parse(tmplContent)
 	if err != nil {
+		if t.Debug {
+			fmt.Println(tmplContent)
+		}
 		return "", fmt.Errorf("failed to parse template: %w", err)
 	}
 

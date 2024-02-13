@@ -93,6 +93,13 @@ func WithJSFiles(files map[string]string) Opt {
 	}
 }
 
+// WithDebug enables debug mode for the engine, which will log additional information when errors occur.
+func WithDebug() Opt {
+	return func(e *Engine) {
+		e.templator.Debug = true
+	}
+}
+
 // Engine provides the templating engine.
 type Engine struct {
 	searchLocations []string
