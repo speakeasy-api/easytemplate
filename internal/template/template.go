@@ -262,6 +262,7 @@ func (t *Templator) execTemplate(name string, tmplContent string, data any, repl
 	tmp, err := template.New(name).Funcs(t.TmplFuncs).Parse(tmplContent)
 	if err != nil {
 		if t.Debug {
+			//nolint:forbidigo
 			fmt.Println(tmplContent)
 		}
 		return "", fmt.Errorf("failed to parse template: %w", err)
