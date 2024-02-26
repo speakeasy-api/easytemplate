@@ -2,12 +2,28 @@ package easytemplate
 
 import (
 	"github.com/dop251/goja"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func (e *Engine) templateFileJS(call CallContext) goja.Value {
+	templateFile := call.Argument(0).String()
+	outFile := call.Argument(1).String()
 	inputData := call.Argument(2).Export() //nolint:gomnd
 
-	if err := e.templator.TemplateFile(call.VM, call.Argument(0).String(), call.Argument(1).String(), inputData); err != nil {
+	ctx := call.Ctx
+	_, span := e.tracer.Start(ctx, "js:templateFile", trace.WithAttributes(
+		attribute.String("templateFile", templateFile),
+		attribute.String("outFile", outFile),
+	))
+	defer span.End()
+
+	if err := e.templator.TemplateFile(call.VM, templateFile, outFile, inputData); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		span.End()
+
 		panic(call.VM.NewGoError(err))
 	}
 
