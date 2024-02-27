@@ -5,6 +5,7 @@
 package easytemplate
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -15,6 +16,10 @@ import (
 	"github.com/speakeasy-api/easytemplate/internal/template"
 	"github.com/speakeasy-api/easytemplate/internal/utils"
 	"github.com/speakeasy-api/easytemplate/internal/vm"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 )
 
 var (
@@ -33,7 +38,8 @@ var (
 // CallContext is the context that is passed to go functions when called from js.
 type CallContext struct {
 	goja.FunctionCall
-	VM *vm.VM
+	VM  *vm.VM
+	Ctx context.Context //nolint:containedctx // runtime context is necessarily stored in a struct as it jumps from Go to JS.
 }
 
 // Opt is a function that configures the Engine.
@@ -93,6 +99,13 @@ func WithJSFiles(files map[string]string) Opt {
 	}
 }
 
+// WithTracer attaches an OpenTelemetry tracer to the engine and enables tracing support.
+func WithTracer(t trace.Tracer) Opt {
+	return func(e *Engine) {
+		e.tracer = t
+	}
+}
+
 // WithDebug enables debug mode for the engine, which will log additional information when errors occur.
 func WithDebug() Opt {
 	return func(e *Engine) {
@@ -110,6 +123,8 @@ type Engine struct {
 	ran     bool
 	jsFuncs map[string]func(call CallContext) goja.Value
 	jsFiles map[string]string
+
+	tracer trace.Tracer
 }
 
 // New creates a new Engine with the provided options.
@@ -148,12 +163,21 @@ func New(opts ...Opt) *Engine {
 		opt(e)
 	}
 
+	if e.tracer == nil {
+		e.tracer = noop.NewTracerProvider().Tracer("easytemplate")
+	}
+
 	return e
 }
 
 // RunScript runs the provided script file, with the provided data, starting the template engine and templating any templates triggered from the script.
 func (e *Engine) RunScript(scriptFile string, data any) error {
-	vm, err := e.init(data)
+	return e.RunScriptWithContext(context.Background(), scriptFile, data)
+}
+
+// RunScriptWithContext runs the provided script file, with the provided data, starting the template engine and templating any templates triggered from the script.
+func (e *Engine) RunScriptWithContext(ctx context.Context, scriptFile string, data any) error {
+	vm, err := e.init(ctx, data)
 	if err != nil {
 		return err
 	}
@@ -172,7 +196,12 @@ func (e *Engine) RunScript(scriptFile string, data any) error {
 
 // RunMethod enables calls to global template methods from easytemplate.
 func (e *Engine) RunMethod(scriptFile string, data any, fnName string, args ...any) (goja.Value, error) {
-	vm, err := e.init(data)
+	return e.RunMethodWithContext(context.Background(), scriptFile, data, fnName, args...)
+}
+
+// RunMethodWithContext enables calls to global template methods from easytemplate.
+func (e *Engine) RunMethodWithContext(ctx context.Context, scriptFile string, data any, fnName string, args ...any) (goja.Value, error) {
+	vm, err := e.init(ctx, data)
 	if err != nil {
 		return nil, err
 	}
@@ -205,7 +234,12 @@ func (e *Engine) RunMethod(scriptFile string, data any, fnName string, args ...a
 
 // RunTemplate runs the provided template file, with the provided data, starting the template engine and templating the provided template to a file.
 func (e *Engine) RunTemplate(templateFile string, outFile string, data any) error {
-	vm, err := e.init(data)
+	return e.RunTemplateWithContext(context.Background(), templateFile, outFile, data)
+}
+
+// RunTemplateWithContext runs the provided template file, with the provided data, starting the template engine and templating the provided template to a file.
+func (e *Engine) RunTemplateWithContext(ctx context.Context, templateFile string, outFile string, data any) error {
+	vm, err := e.init(ctx, data)
 	if err != nil {
 		return err
 	}
@@ -215,7 +249,12 @@ func (e *Engine) RunTemplate(templateFile string, outFile string, data any) erro
 
 // RunTemplateString runs the provided template file, with the provided data, starting the template engine and templating the provided template, returning the rendered result.
 func (e *Engine) RunTemplateString(templateFile string, data any) (string, error) {
-	vm, err := e.init(data)
+	return e.RunTemplateStringWithContext(context.Background(), templateFile, data)
+}
+
+// RunTemplateStringWithContext runs the provided template file, with the provided data, starting the template engine and templating the provided template, returning the rendered result.
+func (e *Engine) RunTemplateStringWithContext(ctx context.Context, templateFile string, data any) (string, error) {
+	vm, err := e.init(ctx, data)
 	if err != nil {
 		return "", err
 	}
@@ -225,7 +264,12 @@ func (e *Engine) RunTemplateString(templateFile string, data any) (string, error
 
 // RunTemplateStringInput runs the provided input template string, with the provided data, starting the template engine and templating the provided template, returning the rendered result.
 func (e *Engine) RunTemplateStringInput(name, template string, data any) (string, error) {
-	vm, err := e.init(data)
+	return e.RunTemplateStringInputWithContext(context.Background(), name, template, data)
+}
+
+// RunTemplateStringInputWithContext runs the provided input template string, with the provided data, starting the template engine and templating the provided template, returning the rendered result.
+func (e *Engine) RunTemplateStringInputWithContext(ctx context.Context, name, template string, data any) (string, error) {
+	vm, err := e.init(ctx, data)
 	if err != nil {
 		return "", err
 	}
@@ -234,7 +278,7 @@ func (e *Engine) RunTemplateStringInput(name, template string, data any) (string
 }
 
 //nolint:funlen
-func (e *Engine) init(data any) (*vm.VM, error) {
+func (e *Engine) init(ctx context.Context, data any) (*vm.VM, error) {
 	if e.ran {
 		return nil, ErrAlreadyRan
 	}
@@ -258,6 +302,7 @@ func (e *Engine) init(data any) (*vm.VM, error) {
 				return fn(CallContext{
 					FunctionCall: call,
 					VM:           v,
+					Ctx:          ctx,
 				})
 			}
 		}(fn)
@@ -270,7 +315,20 @@ func (e *Engine) init(data any) (*vm.VM, error) {
 	// This need to have the vm passed in so that the functions can be called
 	e.templator.TmplFuncs["templateFile"] = func(v *vm.VM) func(string, string, any) (string, error) {
 		return func(templateFile, outFile string, data any) (string, error) {
-			err := e.templator.TemplateFile(v, templateFile, outFile, data)
+			var err error
+			_, span := e.tracer.Start(ctx, "templateFile", trace.WithAttributes(
+				attribute.String("templateFile", templateFile),
+				attribute.String("outFile", outFile),
+			))
+			defer func() {
+				span.RecordError(err)
+				if err != nil {
+					span.SetStatus(codes.Error, err.Error())
+				}
+				span.End()
+			}()
+
+			err = e.templator.TemplateFile(v, templateFile, outFile, data)
 			if err != nil {
 				return "", err
 			}

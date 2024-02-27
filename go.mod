@@ -8,7 +8,9 @@ require (
 	github.com/evanw/esbuild v0.19.11
 	github.com/go-sourcemap/sourcemap v2.1.3+incompatible
 	github.com/golang/mock v1.6.0
-	github.com/stretchr/testify v1.8.1
+	github.com/stretchr/testify v1.8.4
+	go.opentelemetry.io/otel v1.24.0
+	go.opentelemetry.io/otel/trace v1.24.0
 )
 
 require (

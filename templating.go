@@ -2,12 +2,28 @@ package easytemplate
 
 import (
 	"github.com/dop251/goja"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func (e *Engine) templateFileJS(call CallContext) goja.Value {
+	templateFile := call.Argument(0).String()
+	outFile := call.Argument(1).String()
 	inputData := call.Argument(2).Export() //nolint:gomnd
 
-	if err := e.templator.TemplateFile(call.VM, call.Argument(0).String(), call.Argument(1).String(), inputData); err != nil {
+	ctx := call.Ctx
+	_, span := e.tracer.Start(ctx, "js:templateFile", trace.WithAttributes(
+		attribute.String("templateFile", templateFile),
+		attribute.String("outFile", outFile),
+	))
+	defer span.End()
+
+	if err := e.templator.TemplateFile(call.VM, templateFile, outFile, inputData); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		span.End()
+
 		panic(call.VM.NewGoError(err))
 	}
 
@@ -15,10 +31,21 @@ func (e *Engine) templateFileJS(call CallContext) goja.Value {
 }
 
 func (e *Engine) templateStringJS(call CallContext) goja.Value {
+	templateFile := call.Argument(0).String()
 	inputData := call.Argument(1).Export()
 
-	output, err := e.templator.TemplateString(call.VM, call.Argument(0).String(), inputData)
+	ctx := call.Ctx
+	_, span := e.tracer.Start(ctx, "js:templateString", trace.WithAttributes(
+		attribute.String("templateFile", templateFile),
+	))
+	defer span.End()
+
+	output, err := e.templator.TemplateString(call.VM, templateFile, inputData)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		span.End()
+
 		panic(call.VM.NewGoError(err))
 	}
 
@@ -26,10 +53,22 @@ func (e *Engine) templateStringJS(call CallContext) goja.Value {
 }
 
 func (e *Engine) templateStringInputJS(call CallContext) goja.Value {
+	name := call.Argument(0).String()
+	input := call.Argument(1).String()
 	inputData := call.Argument(2).Export() //nolint:gomnd
 
-	output, err := e.templator.TemplateStringInput(call.VM, call.Argument(0).String(), call.Argument(1).String(), inputData)
+	ctx := call.Ctx
+	_, span := e.tracer.Start(ctx, "js:templateStringInput", trace.WithAttributes(
+		attribute.String("name", name),
+	))
+	defer span.End()
+
+	output, err := e.templator.TemplateStringInput(call.VM, name, input, inputData)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		span.End()
+
 		panic(call.VM.NewGoError(err))
 	}
 
