@@ -39,7 +39,7 @@ var (
 type CallContext struct {
 	goja.FunctionCall
 	VM  *vm.VM
-	Ctx context.Context
+	Ctx context.Context //nolint:containedctx // runtime context is necessarily stored in a struct as it jumps from Go to JS.
 }
 
 // Opt is a function that configures the Engine.
@@ -99,6 +99,7 @@ func WithJSFiles(files map[string]string) Opt {
 	}
 }
 
+// WithTracer attaches an OpenTelemetry tracer to the engine and enables tracing support.
 func WithTracer(t trace.Tracer) Opt {
 	return func(e *Engine) {
 		e.tracer = t
