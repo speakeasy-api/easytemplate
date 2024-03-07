@@ -23,8 +23,10 @@ import (
 )
 
 var (
-	// ErrAlreadyRan is returned when the engine has already been ran, and can't be ran again. In order to run the engine again, a new engine must be created.
-	ErrAlreadyRan = errors.New("engine has already been ran")
+	// ErrAlreadyInitialized is returned when the engine has already been initialized.
+	ErrAlreadyInitialized = errors.New("engine has already been initialized")
+	// ErrNotInitialized is returned when the engine has not been initialized.
+	ErrNotInitialized = errors.New("engine has not been initialized")
 	// ErrReserved is returned when a template or js function is reserved and can't be overridden.
 	ErrReserved = errors.New("function is a reserved function and can't be overridden")
 	// ErrInvalidArg is returned when an invalid argument is passed to a function.
@@ -120,11 +122,12 @@ type Engine struct {
 
 	templator *template.Templator
 
-	ran     bool
 	jsFuncs map[string]func(call CallContext) goja.Value
 	jsFiles map[string]string
 
 	tracer trace.Tracer
+
+	vm *vm.VM
 }
 
 // New creates a new Engine with the provided options.
@@ -170,16 +173,26 @@ func New(opts ...Opt) *Engine {
 	return e
 }
 
-// RunScript runs the provided script file, with the provided data, starting the template engine and templating any templates triggered from the script.
-func (e *Engine) RunScript(scriptFile string, data any) error {
-	return e.RunScriptWithContext(context.Background(), scriptFile, data)
-}
-
-// RunScriptWithContext runs the provided script file, with the provided data, starting the template engine and templating any templates triggered from the script.
-func (e *Engine) RunScriptWithContext(ctx context.Context, scriptFile string, data any) error {
-	vm, err := e.init(ctx, data)
+// Init initializes the engine with global data available to all following methods, and should be called before any other methods are called but only once.
+// When using any of the Run or Template methods after init, they will share the global data, but just be careful they will also share any changes made to the environment
+// by previous runs.
+func (e *Engine) Init(ctx context.Context, data any) error {
+	v, err := e.init(ctx, data)
 	if err != nil {
 		return err
+	}
+
+	e.vm = v
+
+	return nil
+}
+
+// RunScript runs the provided script file within the environment initialized by Init.
+// This is useful for setting up the environment with global variables and functions,
+// or running code that is not directly related to templating but might setup the environment for templating.
+func (e *Engine) RunScript(scriptFile string) error {
+	if e.vm == nil {
+		return ErrNotInitialized
 	}
 
 	script, err := e.readFile(scriptFile)
@@ -187,42 +200,28 @@ func (e *Engine) RunScriptWithContext(ctx context.Context, scriptFile string, da
 		return fmt.Errorf("failed to read script file: %w", err)
 	}
 
-	if _, err := vm.Run(scriptFile, string(script)); err != nil {
+	if _, err := e.vm.Run(scriptFile, string(script)); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-// RunMethod enables calls to global template methods from easytemplate.
-func (e *Engine) RunMethod(scriptFile string, data any, fnName string, args ...any) (goja.Value, error) {
-	return e.RunMethodWithContext(context.Background(), scriptFile, data, fnName, args...)
-}
-
-// RunMethodWithContext enables calls to global template methods from easytemplate.
-func (e *Engine) RunMethodWithContext(ctx context.Context, scriptFile string, data any, fnName string, args ...any) (goja.Value, error) {
-	vm, err := e.init(ctx, data)
-	if err != nil {
-		return nil, err
+// RunFunction will run the named function if it already exists within the environment, for example if it was defined in a script run by RunScript.
+// The provided args will be passed to the function, and the result will be returned.
+func (e *Engine) RunFunction(fnName string, args ...any) (goja.Value, error) {
+	if e.vm == nil {
+		return nil, ErrNotInitialized
 	}
 
-	script, err := e.readFile(scriptFile)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read script file: %w", err)
-	}
-
-	if _, err := vm.Run(scriptFile, string(script)); err != nil {
-		return nil, err
-	}
-
-	fn, ok := goja.AssertFunction(vm.Get(fnName))
+	fn, ok := goja.AssertFunction(e.vm.Get(fnName))
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrFunctionNotFound, fnName)
 	}
 
 	gojaArgs := make([]goja.Value, len(args))
 	for i, arg := range args {
-		gojaArgs[i] = vm.ToValue(arg)
+		gojaArgs[i] = e.vm.ToValue(arg)
 	}
 	val, err := fn(goja.Undefined(), gojaArgs...)
 	if err != nil {
@@ -232,57 +231,38 @@ func (e *Engine) RunMethodWithContext(ctx context.Context, scriptFile string, da
 	return val, nil
 }
 
-// RunTemplate runs the provided template file, with the provided data, starting the template engine and templating the provided template to a file.
-func (e *Engine) RunTemplate(templateFile string, outFile string, data any) error {
-	return e.RunTemplateWithContext(context.Background(), templateFile, outFile, data)
-}
-
-// RunTemplateWithContext runs the provided template file, with the provided data, starting the template engine and templating the provided template to a file.
-func (e *Engine) RunTemplateWithContext(ctx context.Context, templateFile string, outFile string, data any) error {
-	vm, err := e.init(ctx, data)
-	if err != nil {
-		return err
+// TemplateFile runs the provided template file, with the provided data and writes the result to the provided outFile.
+func (e *Engine) TemplateFile(templateFile string, outFile string, data any) error {
+	if e.vm == nil {
+		return ErrNotInitialized
 	}
 
-	return e.templator.TemplateFile(vm, templateFile, outFile, data)
+	return e.templator.TemplateFile(e.vm, templateFile, outFile, data)
 }
 
-// RunTemplateString runs the provided template file, with the provided data, starting the template engine and templating the provided template, returning the rendered result.
-func (e *Engine) RunTemplateString(templateFile string, data any) (string, error) {
-	return e.RunTemplateStringWithContext(context.Background(), templateFile, data)
-}
-
-// RunTemplateStringWithContext runs the provided template file, with the provided data, starting the template engine and templating the provided template, returning the rendered result.
-func (e *Engine) RunTemplateStringWithContext(ctx context.Context, templateFile string, data any) (string, error) {
-	vm, err := e.init(ctx, data)
-	if err != nil {
-		return "", err
+// TemplateString runs the provided template file, with the provided data and returns the rendered result.
+func (e *Engine) TemplateString(templateFilePath string, data any) (string, error) {
+	if e.vm == nil {
+		return "", ErrNotInitialized
 	}
 
-	return e.templator.TemplateString(vm, templateFile, data)
+	return e.templator.TemplateString(e.vm, templateFilePath, data)
 }
 
-// RunTemplateStringInput runs the provided input template string, with the provided data, starting the template engine and templating the provided template, returning the rendered result.
-func (e *Engine) RunTemplateStringInput(name, template string, data any) (string, error) {
-	return e.RunTemplateStringInputWithContext(context.Background(), name, template, data)
-}
-
-// RunTemplateStringInputWithContext runs the provided input template string, with the provided data, starting the template engine and templating the provided template, returning the rendered result.
-func (e *Engine) RunTemplateStringInputWithContext(ctx context.Context, name, template string, data any) (string, error) {
-	vm, err := e.init(ctx, data)
-	if err != nil {
-		return "", err
+// TemplateStringInput runs the provided template string, with the provided data and returns the rendered result.
+func (e *Engine) TemplateStringInput(name, template string, data any) (string, error) {
+	if e.vm == nil {
+		return "", ErrNotInitialized
 	}
 
-	return e.templator.TemplateStringInput(vm, name, template, data)
+	return e.templator.TemplateStringInput(e.vm, name, template, data)
 }
 
 //nolint:funlen
 func (e *Engine) init(ctx context.Context, data any) (*vm.VM, error) {
-	if e.ran {
-		return nil, ErrAlreadyRan
+	if e.vm != nil {
+		return nil, ErrAlreadyInitialized
 	}
-	e.ran = true
 
 	v, err := vm.New()
 	if err != nil {

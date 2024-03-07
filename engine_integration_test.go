@@ -1,6 +1,7 @@
 package easytemplate_test
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"testing"
@@ -51,9 +52,13 @@ func TestEngine_RunScript_Success(t *testing.T) {
 			},
 		}),
 	)
-	err = e.RunScript("scripts/test.js", map[string]interface{}{
+
+	err = e.Init(context.Background(), map[string]interface{}{
 		"Test": "global",
 	})
+	require.NoError(t, err)
+
+	err = e.RunScript("scripts/test.js")
 	require.NoError(t, err)
 
 	assert.Empty(t, expectedFiles, "not all expected files were written")

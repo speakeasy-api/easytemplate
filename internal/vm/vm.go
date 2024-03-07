@@ -80,12 +80,16 @@ func (v *VM) Run(name string, src string, opts ...Option) (goja.Value, error) {
 		return nil, err
 	}
 
-	m, err := sourcemap.Parse("", p.sourceMap)
-	if err != nil {
-		return nil, fmt.Errorf("failed to compile source map for script: %w", err)
+	if len(p.sourceMap) > 0 {
+		m, err := sourcemap.Parse("", p.sourceMap)
+		if err != nil {
+			if !strings.Contains(err.Error(), "mappings are empty") {
+				return nil, fmt.Errorf("failed to compile source map for script: %w", err)
+			}
+		} else {
+			v.globalSourceMapCache[name] = m
+		}
 	}
-
-	v.globalSourceMapCache[name] = m
 
 	res, err := v.Runtime.RunProgram(p.prog)
 	if err == nil {
