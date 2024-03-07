@@ -3,7 +3,7 @@ module github.com/speakeasy-api/easytemplate
 go 1.19
 
 require (
-	github.com/dop251/goja v0.0.0-20231027120936-b396bb4c349d
+	github.com/dop251/goja v0.0.0-20240220182346-e401ed450204
 	github.com/dop251/goja_nodejs v0.0.0-20231122114759-e84d9a924c5c
 	github.com/evanw/esbuild v0.19.11
 	github.com/go-sourcemap/sourcemap v2.1.3+incompatible
