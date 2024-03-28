@@ -30,6 +30,10 @@ var (
 	ErrFunctionNotFound = errors.New("failed to find function")
 )
 
+const (
+	sleepThreshold = 50 * time.Millisecond
+)
+
 var lineNumberRegex = regexp.MustCompile(` \(*([^ ]+):([0-9]+):([0-9]+)\([0-9]+\)`)
 
 // VM is a wrapper around the goja runtime.
@@ -106,7 +110,7 @@ func (v *VM) Run(ctx context.Context, name string, src string, opts ...Option) (
 			case <-done:
 				running = false
 			default:
-				time.Sleep(10 * time.Millisecond)
+				time.Sleep(sleepThreshold)
 			}
 		}
 	}(done)
@@ -152,7 +156,7 @@ func (v *VM) RunFunction(ctx context.Context, fnName string, args ...any) (goja.
 			case <-done:
 				running = false
 			default:
-				time.Sleep(10 * time.Millisecond)
+				time.Sleep(sleepThreshold)
 			}
 		}
 	}(done)
