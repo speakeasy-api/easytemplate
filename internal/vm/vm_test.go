@@ -1,6 +1,7 @@
 package vm_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/speakeasy-api/easytemplate/internal/vm"
@@ -21,6 +22,6 @@ function test(input: Test): string {
 
 test({ Name: "test" });`
 
-	_, err = v.Run("test", typeScript)
+	_, err = v.Run(context.Background(), "test", typeScript)
 	assert.Equal(t, "failed to run script Error: test error\n\tat test (test:5:7:*(3))\n\tat test:8:5:*(6)\n: script runtime failure", err.Error())
 }

@@ -33,8 +33,6 @@ var (
 	ErrInvalidArg = errors.New("invalid argument")
 	// ErrTemplateCompilation is returned when a template fails to compile.
 	ErrTemplateCompilation = errors.New("template compilation failed")
-	// ErrFunctionNotFound Function does not exist in script.
-	ErrFunctionNotFound = errors.New("failed to find function")
 )
 
 // CallContext is the context that is passed to go functions when called from js.
@@ -190,7 +188,7 @@ func (e *Engine) Init(ctx context.Context, data any) error {
 // RunScript runs the provided script file within the environment initialized by Init.
 // This is useful for setting up the environment with global variables and functions,
 // or running code that is not directly related to templating but might setup the environment for templating.
-func (e *Engine) RunScript(scriptFile string) error {
+func (e *Engine) RunScript(ctx context.Context, scriptFile string) error {
 	if e.vm == nil {
 		return ErrNotInitialized
 	}
@@ -200,7 +198,7 @@ func (e *Engine) RunScript(scriptFile string) error {
 		return fmt.Errorf("failed to read script file: %w", err)
 	}
 
-	if _, err := e.vm.Run(scriptFile, string(script)); err != nil {
+	if _, err := e.vm.Run(ctx, scriptFile, string(script)); err != nil {
 		return err
 	}
 
@@ -209,53 +207,39 @@ func (e *Engine) RunScript(scriptFile string) error {
 
 // RunFunction will run the named function if it already exists within the environment, for example if it was defined in a script run by RunScript.
 // The provided args will be passed to the function, and the result will be returned.
-func (e *Engine) RunFunction(fnName string, args ...any) (goja.Value, error) {
+func (e *Engine) RunFunction(ctx context.Context, fnName string, args ...any) (goja.Value, error) {
 	if e.vm == nil {
 		return nil, ErrNotInitialized
 	}
 
-	fn, ok := goja.AssertFunction(e.vm.Get(fnName))
-	if !ok {
-		return nil, fmt.Errorf("%w: %s", ErrFunctionNotFound, fnName)
-	}
-
-	gojaArgs := make([]goja.Value, len(args))
-	for i, arg := range args {
-		gojaArgs[i] = e.vm.ToValue(arg)
-	}
-	val, err := fn(goja.Undefined(), gojaArgs...)
-	if err != nil {
-		return nil, err
-	}
-
-	return val, nil
+	return e.vm.RunFunction(ctx, fnName, args...)
 }
 
 // TemplateFile runs the provided template file, with the provided data and writes the result to the provided outFile.
-func (e *Engine) TemplateFile(templateFile string, outFile string, data any) error {
+func (e *Engine) TemplateFile(ctx context.Context, templateFile string, outFile string, data any) error {
 	if e.vm == nil {
 		return ErrNotInitialized
 	}
 
-	return e.templator.TemplateFile(e.vm, templateFile, outFile, data)
+	return e.templator.TemplateFile(ctx, e.vm, templateFile, outFile, data)
 }
 
 // TemplateString runs the provided template file, with the provided data and returns the rendered result.
-func (e *Engine) TemplateString(templateFilePath string, data any) (string, error) {
+func (e *Engine) TemplateString(ctx context.Context, templateFilePath string, data any) (string, error) {
 	if e.vm == nil {
 		return "", ErrNotInitialized
 	}
 
-	return e.templator.TemplateString(e.vm, templateFilePath, data)
+	return e.templator.TemplateString(ctx, e.vm, templateFilePath, data)
 }
 
 // TemplateStringInput runs the provided template string, with the provided data and returns the rendered result.
-func (e *Engine) TemplateStringInput(name, template string, data any) (string, error) {
+func (e *Engine) TemplateStringInput(ctx context.Context, name, template string, data any) (string, error) {
 	if e.vm == nil {
 		return "", ErrNotInitialized
 	}
 
-	return e.templator.TemplateStringInput(e.vm, name, template, data)
+	return e.templator.TemplateStringInput(ctx, e.vm, name, template, data)
 }
 
 //nolint:funlen
@@ -308,7 +292,7 @@ func (e *Engine) init(ctx context.Context, data any) (*vm.VM, error) {
 				span.End()
 			}()
 
-			err = e.templator.TemplateFile(v, templateFile, outFile, data)
+			err = e.templator.TemplateFile(ctx, v, templateFile, outFile, data)
 			if err != nil {
 				return "", err
 			}
@@ -318,7 +302,7 @@ func (e *Engine) init(ctx context.Context, data any) (*vm.VM, error) {
 	}(v)
 	e.templator.TmplFuncs["templateString"] = func(v *vm.VM) func(string, any) (string, error) {
 		return func(templateFile string, data any) (string, error) {
-			templated, err := e.templator.TemplateString(v, templateFile, data)
+			templated, err := e.templator.TemplateString(ctx, v, templateFile, data)
 			if err != nil {
 				return "", err
 			}
@@ -328,7 +312,7 @@ func (e *Engine) init(ctx context.Context, data any) (*vm.VM, error) {
 	}(v)
 	e.templator.TmplFuncs["templateStringInput"] = func(v *vm.VM) func(string, string, any) (string, error) {
 		return func(name, template string, data any) (string, error) {
-			templated, err := e.templator.TemplateStringInput(v, name, template, data)
+			templated, err := e.templator.TemplateStringInput(ctx, v, name, template, data)
 			if err != nil {
 				return "", err
 			}
@@ -347,11 +331,11 @@ func (e *Engine) init(ctx context.Context, data any) (*vm.VM, error) {
 		}
 	}(v)
 
-	if _, err := v.Run("initCreateComputedContextObject", `function createComputedContextObject() { return {}; }`); err != nil {
+	if _, err := v.Run(ctx, "initCreateComputedContextObject", `function createComputedContextObject() { return {}; }`); err != nil {
 		return nil, utils.HandleJSError("failed to init createComputedContextObject", err)
 	}
 
-	globalComputed, err := v.Run("globalCreateComputedContextObject", `createComputedContextObject();`)
+	globalComputed, err := v.Run(ctx, "globalCreateComputedContextObject", `createComputedContextObject();`)
 	if err != nil {
 		return nil, utils.HandleJSError("failed to init globalComputed", err)
 	}
@@ -396,7 +380,7 @@ func (e *Engine) require(call CallContext) goja.Value {
 		panic(vm.NewGoError(err))
 	}
 
-	if _, err := vm.Run(scriptPath, string(script)); err != nil {
+	if _, err := vm.Run(call.Ctx, scriptPath, string(script)); err != nil {
 		panic(vm.NewGoError(err))
 	}
 

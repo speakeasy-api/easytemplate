@@ -19,7 +19,7 @@ func (e *Engine) templateFileJS(call CallContext) goja.Value {
 	))
 	defer span.End()
 
-	if err := e.templator.TemplateFile(call.VM, templateFile, outFile, inputData); err != nil {
+	if err := e.templator.TemplateFile(call.Ctx, call.VM, templateFile, outFile, inputData); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		span.End()
@@ -40,7 +40,7 @@ func (e *Engine) templateStringJS(call CallContext) goja.Value {
 	))
 	defer span.End()
 
-	output, err := e.templator.TemplateString(call.VM, templateFile, inputData)
+	output, err := e.templator.TemplateString(call.Ctx, call.VM, templateFile, inputData)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -63,7 +63,7 @@ func (e *Engine) templateStringInputJS(call CallContext) goja.Value {
 	))
 	defer span.End()
 
-	output, err := e.templator.TemplateStringInput(call.VM, name, input, inputData)
+	output, err := e.templator.TemplateStringInput(call.Ctx, call.VM, name, input, inputData)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())

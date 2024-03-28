@@ -58,7 +58,7 @@ func TestEngine_RunScript_Success(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = e.RunScript("scripts/test.js")
+	err = e.RunScript(context.Background(), "scripts/test.js")
 	require.NoError(t, err)
 
 	assert.Empty(t, expectedFiles, "not all expected files were written")
