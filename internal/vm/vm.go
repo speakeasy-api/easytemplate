@@ -141,17 +141,24 @@ func (v *VM) RunFunction(ctx context.Context, fnName string, args ...any) (goja.
 		gojaArgs[i] = v.ToValue(arg)
 	}
 
-	// go func() {
-	// 	for {
-	// 		select {
-	// 		case <-ctx.Done():
-	// 			v.Runtime.Interrupt("halt")
-	// 		default:
-	// 		}
-	// 	}
-	// }()
+	done := make(chan bool)
+
+	go func(done chan bool) {
+		running := true
+		for running {
+			select {
+			case <-ctx.Done():
+				v.Runtime.Interrupt("halt")
+			case <-done:
+				running = false
+			default:
+				time.Sleep(10 * time.Millisecond)
+			}
+		}
+	}(done)
 
 	val, err := fn(goja.Undefined(), gojaArgs...)
+	done <- true
 	if err != nil {
 		return nil, err
 	}
