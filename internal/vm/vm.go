@@ -2,11 +2,13 @@
 package vm
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/dop251/goja"
 	"github.com/dop251/goja_nodejs/console"
@@ -24,6 +26,8 @@ var (
 	ErrCompilation = errors.New("script compilation failed")
 	// ErrRuntime is returned when a script fails to run.
 	ErrRuntime = errors.New("script runtime failure")
+	// ErrFunctionNotFound Function does not exist in script.
+	ErrFunctionNotFound = errors.New("failed to find function")
 )
 
 var lineNumberRegex = regexp.MustCompile(` \(*([^ ]+):([0-9]+):([0-9]+)\([0-9]+\)`)
@@ -69,7 +73,7 @@ func New() (*VM, error) {
 }
 
 // Run runs a script in the VM.
-func (v *VM) Run(name string, src string, opts ...Option) (goja.Value, error) {
+func (v *VM) Run(ctx context.Context, name string, src string, opts ...Option) (goja.Value, error) {
 	options := &Options{}
 	for _, opt := range opts {
 		opt(options)
@@ -91,7 +95,24 @@ func (v *VM) Run(name string, src string, opts ...Option) (goja.Value, error) {
 		}
 	}
 
+	done := make(chan bool)
+
+	go func(done chan bool) {
+		running := true
+		for running {
+			select {
+			case <-ctx.Done():
+				v.Runtime.Interrupt("halt")
+			case <-done:
+				running = false
+			default:
+				time.Sleep(10 * time.Millisecond)
+			}
+		}
+	}(done)
+
 	res, err := v.Runtime.RunProgram(p.prog)
+	done <- true
 	if err == nil {
 		return res, nil
 	}
@@ -105,6 +126,37 @@ func (v *VM) Run(name string, src string, opts ...Option) (goja.Value, error) {
 	fixedStackTrace, _ := utils.ReplaceAllStringSubmatchFunc(lineNumberRegex, errString, v.remapLineNumbers(name, options.startingLineNumber))
 
 	return nil, fmt.Errorf("failed to run script %s: %w", fixedStackTrace, ErrRuntime)
+}
+
+// RunFunction will run the named function if it already exists within the environment, for example if it was defined in a script run by RunScript.
+// The provided args will be passed to the function, and the result will be returned.
+func (v *VM) RunFunction(ctx context.Context, fnName string, args ...any) (goja.Value, error) {
+	fn, ok := goja.AssertFunction(v.Get(fnName))
+	if !ok {
+		return nil, fmt.Errorf("%w: %s", ErrFunctionNotFound, fnName)
+	}
+
+	gojaArgs := make([]goja.Value, len(args))
+	for i, arg := range args {
+		gojaArgs[i] = v.ToValue(arg)
+	}
+
+	// go func() {
+	// 	for {
+	// 		select {
+	// 		case <-ctx.Done():
+	// 			v.Runtime.Interrupt("halt")
+	// 		default:
+	// 		}
+	// 	}
+	// }()
+
+	val, err := fn(goja.Undefined(), gojaArgs...)
+	if err != nil {
+		return nil, err
+	}
+
+	return val, nil
 }
 
 // ToObject converts a value to an object.

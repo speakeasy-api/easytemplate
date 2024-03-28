@@ -5,6 +5,7 @@ package template
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -46,7 +47,7 @@ type tmplContext struct {
 type VM interface {
 	Get(name string) goja.Value
 	Set(name string, value any) error
-	Run(name string, src string, opts ...vm.Option) (goja.Value, error)
+	Run(ctx context.Context, name string, src string, opts ...vm.Option) (goja.Value, error)
 	ToObject(val goja.Value) *goja.Object
 }
 
@@ -67,8 +68,8 @@ func (t *Templator) SetContextData(contextData any, globalComputed goja.Value) {
 }
 
 // TemplateFile will template a file and write the output to outFile.
-func (t *Templator) TemplateFile(vm VM, templateFile, outFile string, inputData any) error {
-	output, err := t.TemplateString(vm, templateFile, inputData)
+func (t *Templator) TemplateFile(ctx context.Context, vm VM, templateFile, outFile string, inputData any) error {
+	output, err := t.TemplateString(ctx, vm, templateFile, inputData)
 	if err != nil {
 		return err
 	}
@@ -97,26 +98,26 @@ func (c *inlineScriptContext) render(call goja.FunctionCall) goja.Value {
 }
 
 // TemplateString will template the provided file and return the output as a string.
-func (t *Templator) TemplateString(vm VM, templatePath string, inputData any) (out string, err error) {
+func (t *Templator) TemplateString(ctx context.Context, vm VM, templatePath string, inputData any) (out string, err error) {
 	data, err := t.ReadFunc(templatePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to read template file: %w", err)
 	}
 
-	return t.TemplateStringInput(vm, templatePath, string(data), inputData)
+	return t.TemplateStringInput(ctx, vm, templatePath, string(data), inputData)
 }
 
 // TemplateStringInput will template the provided input string and return the output as a string.
 //
 //nolint:funlen
-func (t *Templator) TemplateStringInput(vm VM, name string, input string, inputData any) (out string, err error) {
+func (t *Templator) TemplateStringInput(ctx context.Context, vm VM, name string, input string, inputData any) (out string, err error) {
 	defer func() {
 		if e := recover(); e != nil {
 			err = fmt.Errorf("failed to render template: %s", e)
 		}
 	}()
 
-	localComputed, err := vm.Run("localCreateComputedContextObject", `createComputedContextObject();`)
+	localComputed, err := vm.Run(ctx, "localCreateComputedContextObject", `createComputedContextObject();`)
 	if err != nil {
 		return "", utils.HandleJSError("failed to create local computed context", err)
 	}
@@ -133,7 +134,7 @@ func (t *Templator) TemplateStringInput(vm VM, name string, input string, inputD
 	}
 	if numRecursions > 0 {
 		numIterations = numRecursions + 1
-		localRecursiveComputed, err = vm.Run("recursiveCreateComputedContextObject", `createComputedContextObject();`)
+		localRecursiveComputed, err = vm.Run(ctx, "recursiveCreateComputedContextObject", `createComputedContextObject();`)
 		if err != nil {
 			return "", utils.HandleJSError("failed to create recursive computed context", err)
 		}
@@ -152,7 +153,7 @@ func (t *Templator) TemplateStringInput(vm VM, name string, input string, inputD
 			return "", fmt.Errorf("failed to set context: %w", err)
 		}
 
-		evaluated, replacedLines, err := t.evaluateInlineScripts(vm, name, input)
+		evaluated, replacedLines, err := t.evaluateInlineScripts(ctx, vm, name, input)
 		if err != nil {
 			return "", err
 		}
@@ -194,7 +195,7 @@ func (t *Templator) TemplateStringInput(vm VM, name string, input string, inputD
 	return out, nil
 }
 
-func (t *Templator) evaluateInlineScripts(vm VM, templatePath, content string) (string, int, error) {
+func (t *Templator) evaluateInlineScripts(ctx context.Context, vm VM, templatePath, content string) (string, int, error) {
 	replacedLines := 0
 
 	evaluated, err := utils.ReplaceAllStringSubmatchFunc(sjsRegex, content, func(match []string) (string, error) {
@@ -203,7 +204,7 @@ func (t *Templator) evaluateInlineScripts(vm VM, templatePath, content string) (
 			return match[0], nil
 		}
 
-		output, err := t.execSJSBlock(vm, match[2], templatePath, findJSBlockLineNumber(content, match[2]))
+		output, err := t.execSJSBlock(ctx, vm, match[2], templatePath, findJSBlockLineNumber(content, match[2]))
 		if err != nil {
 			return "", err
 		}
@@ -219,7 +220,7 @@ func (t *Templator) evaluateInlineScripts(vm VM, templatePath, content string) (
 	return evaluated, replacedLines, nil
 }
 
-func (t *Templator) execSJSBlock(v VM, js, templatePath string, jsBlockLineNumber int) (string, error) {
+func (t *Templator) execSJSBlock(ctx context.Context, v VM, js, templatePath string, jsBlockLineNumber int) (string, error) {
 	currentRender := v.Get("render")
 
 	c := newInlineScriptContext()
@@ -227,7 +228,7 @@ func (t *Templator) execSJSBlock(v VM, js, templatePath string, jsBlockLineNumbe
 		return "", fmt.Errorf("failed to set render function: %w", err)
 	}
 
-	if _, err := v.Run(templatePath, js, vm.WithStartingLineNumber(jsBlockLineNumber)); err != nil {
+	if _, err := v.Run(ctx, templatePath, js, vm.WithStartingLineNumber(jsBlockLineNumber)); err != nil {
 		return "", fmt.Errorf("failed to run inline script in %s:\n```sjs\n%ssjs```\n%w", templatePath, js, err)
 	}
 
