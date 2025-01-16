@@ -58,9 +58,9 @@ import (
 func main() {
     // Create and initialize a new easytemplate engine.
     engine := easytemplate.New()
-	   ctx := context.Background()
+    ctx := context.Background()
     data := 0
-	   engine.Init(ctx, data)
+    engine.Init(ctx, data)
     // Start the engine from a javascript entrypoint.
     err := engine.RunScript(ctx, "main.js")
     if err != nil {
