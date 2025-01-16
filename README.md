@@ -47,6 +47,7 @@ See the [documentation](https://pkg.go.dev/github.com/speakeasy-api/easytemplate
 package main
 
 import (
+    "context"
     "fmt"
     "log"
     "os"
@@ -55,11 +56,13 @@ import (
 )
 
 func main() {
-    // Create a new easytemplate engine.
+    // Create and initialize a new easytemplate engine.
     engine := easytemplate.New()
+    ctx := context.Background()
     data := 0
+    engine.Init(ctx, data)
     // Start the engine from a javascript entrypoint.
-    err := engine.RunScript("main.js", data)
+    err := engine.RunScript(ctx, "main.js")
     if err != nil {
         log.Fatal(err)
     }
