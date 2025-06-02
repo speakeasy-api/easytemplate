@@ -50,6 +50,9 @@ type Options struct {
 // Option represents an option for running a script.
 type Option func(*Options)
 
+// RandSource is a function that returns a seeded float64 value.
+type RandSource func() float64
+
 // WithStartingLineNumber sets the starting line number for the script.
 func WithStartingLineNumber(lineNumber int) Option {
 	return func(o *Options) {
@@ -63,7 +66,7 @@ type program struct {
 }
 
 // New creates a new VM.
-func New() (*VM, error) {
+func New(randSource RandSource) (*VM, error) {
 	g := goja.New()
 	_, err := g.RunString(underscore.JS)
 	if err != nil {
@@ -72,6 +75,12 @@ func New() (*VM, error) {
 
 	new(require.Registry).Enable(g)
 	console.Enable(g)
+
+	if randSource != nil {
+		g.SetRandSource(func() float64 {
+			return randSource()
+		})
+	}
 
 	return &VM{Runtime: g, globalSourceMapCache: make(map[string]*sourcemap.Consumer)}, nil
 }

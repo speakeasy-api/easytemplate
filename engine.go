@@ -113,6 +113,13 @@ func WithDebug() Opt {
 	}
 }
 
+// WithRandSource sets the random source to use in the engine.
+func WithRandSource(randSource func() float64) Opt {
+	return func(e *Engine) {
+		e.randSource = randSource
+	}
+}
+
 // Engine provides the templating engine.
 type Engine struct {
 	searchLocations []string
@@ -124,6 +131,8 @@ type Engine struct {
 	jsFiles map[string]string
 
 	tracer trace.Tracer
+
+	randSource vm.RandSource
 
 	vm *vm.VM
 }
@@ -248,7 +257,7 @@ func (e *Engine) init(ctx context.Context, data any) (*vm.VM, error) {
 		return nil, ErrAlreadyInitialized
 	}
 
-	v, err := vm.New()
+	v, err := vm.New(e.randSource)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create vm: %w", err)
 	}

@@ -9,8 +9,30 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestVM_Run_Runtime_Success(t *testing.T) {
+	v, err := vm.New(nil)
+	require.NoError(t, err)
+
+	typeScript := `console.log("hello world");`
+
+	_, err = v.Run(context.Background(), "test", typeScript)
+	assert.NoError(t, err)
+}
+
+func TestVM_Run_Runtime_WithRandSource_Success(t *testing.T) {
+	v, err := vm.New(func() float64 {
+		return 0
+	})
+	require.NoError(t, err)
+
+	typeScript := `console.log("hello world");`
+
+	_, err = v.Run(context.Background(), "test", typeScript)
+	assert.NoError(t, err)
+}
+
 func TestVM_Run_Runtime_Errors(t *testing.T) {
-	v, err := vm.New()
+	v, err := vm.New(nil)
 	require.NoError(t, err)
 
 	typeScript := `type Test = {
