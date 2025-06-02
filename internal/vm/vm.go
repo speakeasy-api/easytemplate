@@ -50,6 +50,7 @@ type Options struct {
 // Option represents an option for running a script.
 type Option func(*Options)
 
+// RandSource is a function that returns a seeded float64 value.
 type RandSource func() float64
 
 // WithStartingLineNumber sets the starting line number for the script.
