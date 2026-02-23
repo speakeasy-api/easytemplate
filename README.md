@@ -18,6 +18,29 @@ The module includes a number of features on top of the standard [text/template](
 * [x] [Controlling the flow of templating within the engine](#controlling-the-flow-of-templating).
 * [x] [Inject Go functions into the JavaScript context](#registering-js-functions-from-go), in addition to [Go functions into the templates](#registering-templating-functions).
 * [x] [Inject JS functions into the template context.](#registering-js-templating-functions)
+* [x] [Interactive debugging](#debugging) of JS/TS code in VS Code via the [goja DAP debugger](https://github.com/speakeasy-api/goja/tree/feat/debugger/debugger).
+
+## Debugging
+
+easytemplate supports interactive debugging of JavaScript and TypeScript code via the [goja DAP debugger](https://github.com/speakeasy-api/goja/tree/feat/debugger/debugger). This lets you set breakpoints, step through code, and inspect variables in VS Code — both in the initial script execution phase and during template rendering when JS/TS helper functions are invoked.
+
+To enable debugging, pass a debug port when creating the engine:
+
+```go
+engine := easytemplate.New(
+    easytemplate.WithDebugger(4711),
+)
+```
+
+When a debug port is set, the engine will:
+
+1. Compile all scripts with debug metadata (source maps, variable names)
+2. Start a DAP server on the specified TCP port
+3. Wait for a VS Code debugger to connect before executing scripts
+
+You can then set breakpoints in your `.js`/`.ts` files and step through both the initial `RunScript` phase and any `registerTemplateFunc` functions that execute during template rendering.
+
+See the [goja debugger README](https://github.com/speakeasy-api/goja/tree/feat/debugger/debugger) for VS Code extension installation, launch configuration, and full feature documentation.
 
 ## Installation
 

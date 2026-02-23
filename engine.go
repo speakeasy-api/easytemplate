@@ -13,6 +13,7 @@ import (
 	"path"
 
 	"github.com/dop251/goja"
+	"github.com/dop251/goja/debugger"
 	"github.com/speakeasy-api/easytemplate/internal/template"
 	"github.com/speakeasy-api/easytemplate/internal/utils"
 	"github.com/speakeasy-api/easytemplate/internal/vm"
@@ -120,6 +121,23 @@ func WithRandSource(randSource func() float64) Opt {
 	}
 }
 
+// WithDebugger enables DAP (Debug Adapter Protocol) debugging on the specified
+// TCP port. When set, Init() will start a debug server and block until a DAP
+// client (e.g., VS Code) connects. After Init returns, all RunScript,
+// TemplateFile, etc. calls will hit breakpoints. Call Close() when done.
+//
+// Example:
+//
+//	e := easytemplate.New(easytemplate.WithDebugger(4711))
+//	defer e.Close()
+//	e.Init(ctx, data)       // blocks until VS Code attaches
+//	e.RunScript(ctx, "main.js") // breakpoints work
+func WithDebugger(port int) Opt {
+	return func(e *Engine) {
+		e.debugPort = port
+	}
+}
+
 // Engine provides the templating engine.
 type Engine struct {
 	searchLocations []string
@@ -133,6 +151,9 @@ type Engine struct {
 	tracer trace.Tracer
 
 	randSource vm.RandSource
+
+	debugPort    int
+	debugSession *debugger.AttachSession
 
 	vm *vm.VM
 }
@@ -183,6 +204,11 @@ func New(opts ...Opt) *Engine {
 // Init initializes the engine with global data available to all following methods, and should be called before any other methods are called but only once.
 // When using any of the Run or Template methods after init, they will share the global data, but just be careful they will also share any changes made to the environment
 // by previous runs.
+//
+// If debugging is enabled (via WithDebugger), Init starts a DAP debug server
+// and blocks until a client (e.g., VS Code) connects and sets breakpoints.
+// After Init returns, all RunScript/TemplateFile/etc. calls will hit
+// breakpoints normally. Call Close() when done to end the debug session.
 func (e *Engine) Init(ctx context.Context, data any) error {
 	v, err := e.init(ctx, data)
 	if err != nil {
@@ -190,6 +216,20 @@ func (e *Engine) Init(ctx context.Context, data any) error {
 	}
 
 	e.vm = v
+
+	if e.debugPort > 0 {
+		r := e.Runtime()
+		addr := fmt.Sprintf("127.0.0.1:%d", e.debugPort)
+
+		session, err := debugger.AttachTCP(r, addr)
+		if err != nil {
+			return fmt.Errorf("failed to start debugger: %w", err)
+		}
+		e.debugSession = session
+
+		fmt.Fprintf(os.Stderr, "Debugger listening on %s — waiting for client to attach...\n", session.Addr)
+		session.Ready()
+	}
 
 	return nil
 }
@@ -249,6 +289,26 @@ func (e *Engine) TemplateStringInput(ctx context.Context, name, template string,
 	}
 
 	return e.templator.TemplateStringInput(ctx, e.vm, name, template, data)
+}
+
+// Runtime returns the underlying goja Runtime, or nil if the engine has not been initialized.
+// This can be used to set up debugging or other advanced runtime configuration.
+func (e *Engine) Runtime() *goja.Runtime {
+	if e.vm == nil {
+		return nil
+	}
+	return e.vm.GetRuntime()
+}
+
+// Close ends the debug session (if active) and releases resources.
+// For non-debug engines this is a no-op. Safe to call multiple times.
+func (e *Engine) Close() error {
+	if e.debugSession != nil {
+		err := e.debugSession.Close()
+		e.debugSession = nil
+		return err
+	}
+	return nil
 }
 
 //nolint:funlen

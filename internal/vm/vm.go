@@ -105,6 +105,9 @@ func (v *VM) Run(ctx context.Context, name string, src string, opts ...Option) (
 			}
 		} else {
 			v.globalSourceMapCache[name] = m
+			// Attach source map to the program so goja natively resolves
+			// positions (enables debugger breakpoints on TS source lines).
+			p.prog.SetSourceMap(m)
 		}
 	}
 
@@ -184,12 +187,18 @@ func (v *VM) ToObject(val goja.Value) *goja.Object {
 	return val.ToObject(v.Runtime)
 }
 
+// GetRuntime returns the underlying goja Runtime.
+func (v *VM) GetRuntime() *goja.Runtime {
+	return v.Runtime
+}
+
 func (v *VM) compile(name string, src string, strict bool) (*program, error) {
 	// transform src with esbuild -- this ensures we handle typescript
 	result := esbuild.Transform(src, esbuild.TransformOptions{
-		Target:    esbuild.ES2015,
-		Loader:    esbuild.LoaderTS,
-		Sourcemap: esbuild.SourceMapExternal,
+		Target:     esbuild.ES2015,
+		Loader:     esbuild.LoaderTS,
+		Sourcemap:  esbuild.SourceMapExternal,
+		Sourcefile: name,
 	})
 	if len(result.Errors) > 0 {
 		msg := ""
@@ -203,7 +212,7 @@ func (v *VM) compile(name string, src string, strict bool) (*program, error) {
 		return nil, fmt.Errorf("%w: %s", ErrCompilation, msg)
 	}
 
-	p, err := goja.Compile(name, string(result.Code), strict)
+	p, err := v.Runtime.Compile(name, string(result.Code), strict)
 	if err != nil {
 		// TODO while its unlikely esbuild will fail to find a compilation error, if it does and goja finds
 		// it instead we should look to use the source map to find the error location
