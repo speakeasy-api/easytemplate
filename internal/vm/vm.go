@@ -111,24 +111,10 @@ func (v *VM) Run(ctx context.Context, name string, src string, opts ...Option) (
 		}
 	}
 
-	done := make(chan bool)
-
-	go func(done chan bool) {
-		running := true
-		for running {
-			select {
-			case <-ctx.Done():
-				v.Runtime.Interrupt("halt")
-			case <-done:
-				running = false
-			default:
-				time.Sleep(sleepThreshold)
-			}
-		}
-	}(done)
+	done := v.startInterruptMonitor(ctx)
+	defer close(done)
 
 	res, err := v.Runtime.RunProgram(p.prog)
-	done <- true
 	if err == nil {
 		return res, nil
 	}
@@ -157,29 +143,32 @@ func (v *VM) RunFunction(ctx context.Context, fnName string, args ...any) (goja.
 		gojaArgs[i] = v.ToValue(arg)
 	}
 
-	done := make(chan bool)
-
-	go func(done chan bool) {
-		running := true
-		for running {
-			select {
-			case <-ctx.Done():
-				v.Runtime.Interrupt("halt")
-			case <-done:
-				running = false
-			default:
-				time.Sleep(sleepThreshold)
-			}
-		}
-	}(done)
+	done := v.startInterruptMonitor(ctx)
+	defer close(done)
 
 	val, err := fn(goja.Undefined(), gojaArgs...)
-	done <- true
 	if err != nil {
 		return nil, err
 	}
 
 	return val, nil
+}
+
+func (v *VM) startInterruptMonitor(ctx context.Context) chan struct{} {
+	done := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				v.Runtime.Interrupt("halt")
+			case <-done:
+				return
+			default:
+				time.Sleep(sleepThreshold)
+			}
+		}
+	}()
+	return done
 }
 
 // ToObject converts a value to an object.
