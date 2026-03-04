@@ -63,3 +63,42 @@ func TestEngine_RunScript_Success(t *testing.T) {
 
 	assert.Empty(t, expectedFiles, "not all expected files were written")
 }
+
+func TestEngine_GoRuntimePanicCaughtByJSTryCatch(t *testing.T) {
+	// Verifies that Go runtime panics (e.g. nil-pointer dereference) from
+	// native functions are converted to GoError exceptions that JS try/catch
+	// can handle, rather than bypassing JS error handling entirely.
+	type myStruct struct {
+		Name string
+	}
+
+	e := easytemplate.New(
+		easytemplate.WithJSFuncs(map[string]func(call easytemplate.CallContext) goja.Value{
+			"panicWithNilDeref": func(call easytemplate.CallContext) goja.Value {
+				var s *myStruct // nil pointer
+				return call.VM.ToValue(s.Name) // will panic: nil pointer dereference
+			},
+		}),
+		easytemplate.WithJSFiles(map[string]string{
+			"init.js": `
+				function testCatch() {
+					try {
+						panicWithNilDeref();
+						return "not caught";
+					} catch (e) {
+						return "caught";
+					}
+				}
+			`,
+		}),
+	)
+
+	err := e.Init(context.Background(), nil)
+	require.NoError(t, err)
+
+	// The JS try/catch should catch the Go panic, and the function should
+	// return "caught" instead of crashing the process.
+	val, err := e.RunFunction(context.Background(), "testCatch")
+	require.NoError(t, err)
+	assert.Equal(t, "caught", val.Export())
+}
