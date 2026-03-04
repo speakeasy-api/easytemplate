@@ -512,7 +512,7 @@ func recoverGoRuntimePanic(v *vm.VM) {
 	// Convert Go runtime panics to goja GoError exceptions.
 	var goErr error
 	if e, ok := r.(error); ok {
-		goErr = fmt.Errorf("%w: %w", ErrNativePanic, e)
+		goErr = fmt.Errorf("%w: %s", ErrNativePanic, e.Error())
 	} else {
 		goErr = fmt.Errorf("%w: %v", ErrNativePanic, r)
 	}
