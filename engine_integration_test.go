@@ -102,3 +102,63 @@ func TestEngine_GoRuntimePanicCaughtByJSTryCatch(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "caught", val.Export())
 }
+
+func TestEngine_GoRuntimePanicIncludesStackTrace(t *testing.T) {
+	// Verifies that when a Go runtime panic escapes to the caller (no JS
+	// try/catch), the returned error contains a PanicError with both Go and
+	// JS stack traces.
+	type myStruct struct {
+		Name string
+	}
+
+	e := easytemplate.New(
+		easytemplate.WithJSFuncs(map[string]func(call easytemplate.CallContext) goja.Value{
+			"panicWithNilDeref": func(call easytemplate.CallContext) goja.Value {
+				var s *myStruct                // nil pointer
+				return call.VM.ToValue(s.Name) // will panic: nil pointer dereference
+			},
+		}),
+		easytemplate.WithJSFiles(map[string]string{
+			"init.js": `
+				function outerFunc() {
+					return innerFunc();
+				}
+				function innerFunc() {
+					return panicWithNilDeref();
+				}
+			`,
+		}),
+	)
+
+	err := e.Init(context.Background(), nil)
+	require.NoError(t, err)
+
+	_, err = e.RunFunction(context.Background(), "outerFunc")
+	require.Error(t, err)
+
+	// The error should wrap a GoError whose value is a *PanicError.
+	var gojaErr *goja.Exception
+	require.ErrorAs(t, err, &gojaErr)
+
+	// Extract the GoError value from the exception.
+	obj := gojaErr.Value().ToObject(e.Runtime())
+	raw := obj.Get("value").Export()
+
+	panicErr, ok := raw.(*easytemplate.PanicError)
+	require.True(t, ok, "expected *PanicError, got %T", raw)
+
+	// Go stack should contain the panic origin.
+	assert.Contains(t, panicErr.GoStack, "runtime/panic.go")
+	assert.Contains(t, panicErr.GoStack, "recoverGoRuntimePanic")
+
+	// JS stack should contain the JS call chain.
+	jsNames := make([]string, len(panicErr.JSStack))
+	for i, frame := range panicErr.JSStack {
+		jsNames[i] = frame.FuncName()
+	}
+	assert.Contains(t, jsNames, "innerFunc")
+	assert.Contains(t, jsNames, "outerFunc")
+
+	// Should still be unwrappable to ErrNativePanic.
+	assert.ErrorIs(t, panicErr, easytemplate.ErrNativePanic)
+}

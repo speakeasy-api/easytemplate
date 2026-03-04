@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"os"
 	"path"
+	"runtime"
 
 	"github.com/dop251/goja"
 	"github.com/dop251/goja/debugger"
@@ -489,6 +490,26 @@ func (e *Engine) registerTemplateFunc(call CallContext) goja.Value {
 	return goja.Undefined()
 }
 
+// PanicError wraps a Go runtime panic with both the Go stack trace (from the
+// panic site) and the JS call stack (from the goja VM). Downstream consumers
+// can use errors.As to extract the full context.
+type PanicError struct {
+	// Cause is the underlying panic value converted to an error.
+	Cause error
+	// GoStack is the raw Go stack trace captured at the panic site.
+	GoStack string
+	// JSStack is the JS call stack captured from the goja VM at panic time.
+	JSStack []goja.StackFrame
+}
+
+func (e *PanicError) Error() string {
+	return e.Cause.Error()
+}
+
+func (e *PanicError) Unwrap() error {
+	return e.Cause
+}
+
 // recoverGoRuntimePanic recovers Go runtime panics (e.g. nil-pointer
 // dereference, index out of range) and re-panics with a goja GoError so that
 // JS try/catch blocks can handle them. Panics that are already goja-compatible
@@ -509,14 +530,26 @@ func recoverGoRuntimePanic(v *vm.VM) {
 		panic(r)
 	}
 
-	// Convert Go runtime panics to goja GoError exceptions.
-	var goErr error
+	// Capture Go stack trace from the panic site.
+	buf := make([]byte, 4096)
+	n := runtime.Stack(buf, false)
+	goStack := string(buf[:n])
+
+	// Capture JS call stack from the goja VM.
+	jsStack := v.CaptureCallStack(0, nil)
+
+	// Convert Go runtime panics to PanicError with full stack context.
+	var cause error
 	if e, ok := r.(error); ok {
-		goErr = fmt.Errorf("%w: %s", ErrNativePanic, e.Error())
+		cause = fmt.Errorf("%w: %s", ErrNativePanic, e.Error())
 	} else {
-		goErr = fmt.Errorf("%w: %v", ErrNativePanic, r)
+		cause = fmt.Errorf("%w: %v", ErrNativePanic, r)
 	}
-	panic(v.NewGoError(goErr))
+	panic(v.NewGoError(&PanicError{
+		Cause:   cause,
+		GoStack: goStack,
+		JSStack: jsStack,
+	}))
 }
 
 func (e *Engine) readFile(file string) ([]byte, error) {
