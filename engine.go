@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"os"
 	"path"
+	"runtime"
 
 	"github.com/dop251/goja"
 	"github.com/dop251/goja/debugger"
@@ -34,6 +35,8 @@ var (
 	ErrInvalidArg = errors.New("invalid argument")
 	// ErrTemplateCompilation is returned when a template fails to compile.
 	ErrTemplateCompilation = errors.New("template compilation failed")
+	// ErrNativePanic is returned when a Go native function panics with a non-goja error.
+	ErrNativePanic = errors.New("native function panic")
 )
 
 // CallContext is the context that is passed to go functions when called from js.
@@ -332,6 +335,7 @@ func (e *Engine) init(ctx context.Context, data any) (*vm.VM, error) {
 	for name, fn := range e.jsFuncs {
 		wrappedFn := func(fn func(call CallContext) goja.Value) func(call goja.FunctionCall) goja.Value {
 			return func(call goja.FunctionCall) goja.Value {
+				defer recoverGoRuntimePanic(v)
 				return fn(CallContext{
 					FunctionCall: call,
 					VM:           v,
@@ -484,6 +488,68 @@ func (e *Engine) registerTemplateFunc(call CallContext) goja.Value {
 	}(fn)
 
 	return goja.Undefined()
+}
+
+// PanicError wraps a Go runtime panic with both the Go stack trace (from the
+// panic site) and the JS call stack (from the goja VM). Downstream consumers
+// can use errors.As to extract the full context.
+type PanicError struct {
+	// Cause is the underlying panic value converted to an error.
+	Cause error
+	// GoStack is the raw Go stack trace captured at the panic site.
+	GoStack string
+	// JSStack is the JS call stack captured from the goja VM at panic time.
+	JSStack []goja.StackFrame
+}
+
+func (e *PanicError) Error() string {
+	return e.Cause.Error()
+}
+
+func (e *PanicError) Unwrap() error {
+	return e.Cause
+}
+
+// recoverGoRuntimePanic recovers Go runtime panics (e.g. nil-pointer
+// dereference, index out of range) and re-panics with a goja GoError so that
+// JS try/catch blocks can handle them. Panics that are already goja-compatible
+// (goja.Value, *goja.Object, *goja.Exception) are re-thrown unchanged.
+//
+// This is needed because goja's exceptionFromValue only recognises its own
+// types; raw Go runtime panics fall through to the default case which returns
+// nil, causing handleThrow to re-panic — bypassing any JS catch block.
+func recoverGoRuntimePanic(v *vm.VM) {
+	r := recover()
+	if r == nil {
+		return
+	}
+
+	// Already a goja-compatible panic value — re-throw as-is.
+	switch r.(type) {
+	case goja.Value, *goja.Exception:
+		panic(r)
+	}
+
+	// Capture Go stack trace from the panic site.
+	buf := make([]byte, 4096)
+	n := runtime.Stack(buf, false)
+	goStack := string(buf[:n])
+
+	// Capture JS call stack from the goja VM.
+	jsStack := v.CaptureCallStack(0, nil)
+
+	// Convert Go runtime panics to PanicError with full stack context.
+	var cause error
+	if e, ok := r.(error); ok {
+		cause = fmt.Errorf("%w: %s", ErrNativePanic, e.Error())
+	} else {
+		cause = fmt.Errorf("%w: %v", ErrNativePanic, r)
+	}
+	panic(v.NewGoError(&PanicError{
+		Cause:   cause,
+		GoStack: goStack,
+		JSStack: jsStack,
+	}))
 }
 
 func (e *Engine) readFile(file string) ([]byte, error) {
