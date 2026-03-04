@@ -34,6 +34,8 @@ var (
 	ErrInvalidArg = errors.New("invalid argument")
 	// ErrTemplateCompilation is returned when a template fails to compile.
 	ErrTemplateCompilation = errors.New("template compilation failed")
+	// ErrNativePanic is returned when a Go native function panics with a non-goja error.
+	ErrNativePanic = errors.New("native function panic")
 )
 
 // CallContext is the context that is passed to go functions when called from js.
@@ -331,7 +333,7 @@ func (e *Engine) init(ctx context.Context, data any) (*vm.VM, error) {
 
 	for name, fn := range e.jsFuncs {
 		wrappedFn := func(fn func(call CallContext) goja.Value) func(call goja.FunctionCall) goja.Value {
-			return func(call goja.FunctionCall) (result goja.Value) {
+			return func(call goja.FunctionCall) goja.Value {
 				defer recoverGoRuntimePanic(v)
 				return fn(CallContext{
 					FunctionCall: call,
@@ -510,9 +512,9 @@ func recoverGoRuntimePanic(v *vm.VM) {
 	// Convert Go runtime panics to goja GoError exceptions.
 	var goErr error
 	if e, ok := r.(error); ok {
-		goErr = e
+		goErr = fmt.Errorf("%w: %w", ErrNativePanic, e)
 	} else {
-		goErr = fmt.Errorf("%v", r)
+		goErr = fmt.Errorf("%w: %v", ErrNativePanic, r)
 	}
 	panic(v.NewGoError(goErr))
 }

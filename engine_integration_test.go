@@ -75,7 +75,7 @@ func TestEngine_GoRuntimePanicCaughtByJSTryCatch(t *testing.T) {
 	e := easytemplate.New(
 		easytemplate.WithJSFuncs(map[string]func(call easytemplate.CallContext) goja.Value{
 			"panicWithNilDeref": func(call easytemplate.CallContext) goja.Value {
-				var s *myStruct // nil pointer
+				var s *myStruct                // nil pointer
 				return call.VM.ToValue(s.Name) // will panic: nil pointer dereference
 			},
 		}),
