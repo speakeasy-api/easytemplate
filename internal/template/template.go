@@ -59,6 +59,14 @@ type Templator struct {
 	Debug          bool
 	contextData    any
 	globalComputed goja.Value
+	baseTemplate   *template.Template
+}
+
+// RebuildBaseTemplate creates a new base template from the current TmplFuncs.
+// Child templates created via baseTemplate.New(name) share the function maps
+// by pointer, avoiding per-template reflect.ValueOf and map copying overhead.
+func (t *Templator) RebuildBaseTemplate() {
+	t.baseTemplate = template.New("__base__").Funcs(t.TmplFuncs)
 }
 
 // SetContextData allows the setting of global context for templating.
@@ -260,7 +268,11 @@ func getRecursiveComputedContext(vm VM) goja.Value {
 }
 
 func (t *Templator) execTemplate(name string, tmplContent string, data any, replacedLines int) (string, error) {
-	tmp, err := template.New(name).Funcs(t.TmplFuncs).Parse(tmplContent)
+	if t.baseTemplate == nil {
+		t.RebuildBaseTemplate()
+	}
+
+	tmp, err := t.baseTemplate.New(name).Parse(tmplContent)
 	if err != nil {
 		if t.Debug {
 			//nolint:forbidigo
