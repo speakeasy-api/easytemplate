@@ -410,6 +410,8 @@ func (e *Engine) init(ctx context.Context, data any) (*vm.VM, error) {
 	}
 
 	e.templator.SetContextData(data, globalComputed)
+	e.templator.RebuildBaseTemplate()
+
 	if err := v.Set("context", &template.Context{
 		Global:         data,
 		GlobalComputed: globalComputed,
@@ -429,6 +431,7 @@ func (e *Engine) unregisterTemplateFunc(call CallContext) goja.Value {
 	}
 
 	delete(e.templator.TmplFuncs, name)
+	e.templator.RebuildBaseTemplate()
 
 	return goja.Undefined()
 }
@@ -482,6 +485,7 @@ func (e *Engine) registerTemplateFunc(call CallContext) goja.Value {
 			return val.Export()
 		}
 	}(fn)
+	e.templator.RebuildBaseTemplate()
 
 	return goja.Undefined()
 }
