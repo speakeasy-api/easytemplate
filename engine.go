@@ -535,7 +535,7 @@ func recoverGoRuntimePanic(v *vm.VM) {
 	}
 
 	// Capture Go stack trace from the panic site.
-	buf := make([]byte, 4096)
+	buf := make([]byte, 4096) //nolint:mnd
 	n := runtime.Stack(buf, false)
 	goStack := string(buf[:n])
 

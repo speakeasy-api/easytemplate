@@ -6,6 +6,7 @@ package template
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -363,7 +364,7 @@ func adjustLineNumber(name string, err error, replacedLines int) error {
 	lineNumRegex, rErr := regexp.Compile(fmt.Sprintf(`template: %s:(\d+)`, regexp.QuoteMeta(name)))
 	if rErr == nil {
 		errMsg, rErr := utils.ReplaceAllStringSubmatchFunc(lineNumRegex, err.Error(), func(matches []string) (string, error) {
-			if len(matches) != 2 { //nolint:gomnd
+			if len(matches) != 2 { //nolint:mnd
 				return matches[0], nil
 			}
 
@@ -375,7 +376,7 @@ func adjustLineNumber(name string, err error, replacedLines int) error {
 			return strings.Replace(matches[0], matches[1], strconv.Itoa(currentLineNumber+replacedLines), 1), nil
 		})
 		if rErr == nil {
-			err = fmt.Errorf(errMsg)
+			err = errors.New(errMsg)
 		}
 	}
 

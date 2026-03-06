@@ -6,6 +6,7 @@ import (
 
 	"github.com/speakeasy-api/easytemplate/internal/utils"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestReplaceAllStringSubmatchFunc_Success(t *testing.T) {
@@ -34,7 +35,7 @@ func TestReplaceAllStringSubmatchFunc_Success(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			out, err := utils.ReplaceAllStringSubmatchFunc(tt.args.re, tt.args.str, tt.args.repl)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, tt.wantOut, out)
 		})
 	}

@@ -10,7 +10,7 @@ import (
 func (e *Engine) templateFileJS(call CallContext) goja.Value {
 	templateFile := call.Argument(0).String()
 	outFile := call.Argument(1).String()
-	inputData := call.Argument(2).Export() //nolint:gomnd
+	inputData := call.Argument(2).Export() //nolint:mnd
 
 	ctx := call.Ctx
 	_, span := e.tracer.Start(ctx, "js:templateFile", trace.WithAttributes(
@@ -55,7 +55,7 @@ func (e *Engine) templateStringJS(call CallContext) goja.Value {
 func (e *Engine) templateStringInputJS(call CallContext) goja.Value {
 	name := call.Argument(0).String()
 	input := call.Argument(1).String()
-	inputData := call.Argument(2).Export() //nolint:gomnd
+	inputData := call.Argument(2).Export() //nolint:mnd
 
 	ctx := call.Ctx
 	_, span := e.tracer.Start(ctx, "js:templateStringInput", trace.WithAttributes(

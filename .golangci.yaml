@@ -1,81 +1,96 @@
-linters:
-  enable-all: true
-  disable:
-    - lll
-    - varnamelen
-    - exhaustivestruct
-    - exhaustruct
-    - godox
-    - nlreturn
-    - wsl
-    - wrapcheck
-    - gochecknoglobals
-    - paralleltest
-    - dupl
-    - golint
-    - maligned
-    - gci
-    - depguard
-    # deprecated/archived
-    - interfacer
-    - scopelint
-    - nosnakecase
-    - varcheck
-    - structcheck
-    - deadcode
-    - ifshort
-issues:
-  include:
-    - EXC0002
-    - EXC0011
-    - EXC0012
-    - EXC0013
-    - EXC0014
-    - EXC0015
-  exclude:
-    - "returns unexported type"
-    - "unlambda"
-  exclude-rules:
-    # Exclude some linters from running on tests files.
-    - path: _test\.go
-      linters:
-        - goerr113
-        - funlen
-        - godot
-        - dupl
-        - gocognit
-        - cyclop
-        - noctx
-        - maintidx
-        - gosec
-        - gocyclo
-    - path: _exports_test\.go
-      linters:
-        - testpackage
-    - path: cmd/*
-      linters:
-        - funlen
-    - path: internal/*
-      linters:
-        - goerr113
-        - nonamedreturns
-linters-settings:
-  tagliatelle:
-    case:
-      use-field-name: true
-      rules:
-        json: snake
-        yaml: camel
-  stylecheck:
-    checks: ["all", "-ST1000", "-ST1003"]
-  cyclop:
-    max-complexity: 15
-  ireturn:
-    allow:
-      - anon
-      - error
-      - empty
-      - stdlib
-      - "github.com/dop251/goja.Value"
+version: "2"
 run:
   go: "1.19"
+linters:
+  default: all
+  disable:
+    - depguard
+    - dupl
+    - embeddedstructfieldcheck
+    - exhaustruct
+    - funcorder
+    - gochecknoglobals
+    - godox
+    - gomoddirectives
+    - gosec
+    - lll
+    - modernize
+    - nlreturn
+    - noinlineerr
+    - paralleltest
+    - perfsprint
+    - revive
+    - varnamelen
+    - wrapcheck
+    - wsl
+    - wsl_v5
+  settings:
+    cyclop:
+      max-complexity: 15
+    ireturn:
+      allow:
+        - anon
+        - error
+        - empty
+        - stdlib
+        - github.com/dop251/goja.Value
+    staticcheck:
+      checks:
+        - all
+        - -QF1008
+        - -ST1000
+        - -ST1003
+    tagliatelle:
+      case:
+        rules:
+          json: snake
+          yaml: camel
+        use-field-name: true
+  exclusions:
+    generated: lax
+    presets:
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - cyclop
+          - dupl
+          - err113
+          - funlen
+          - gocognit
+          - gocyclo
+          - godot
+          - gosec
+          - maintidx
+          - noctx
+        path: _test\.go
+      - linters:
+          - testpackage
+        path: _exports_test\.go
+      - linters:
+          - funlen
+        path: cmd/*
+      - linters:
+          - err113
+          - nonamedreturns
+        path: internal/*
+      - path: (.+)\.go$
+        text: returns unexported type
+      - path: (.+)\.go$
+        text: unlambda
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gofmt
+    - gofumpt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
