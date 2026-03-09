@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/dop251/goja"
@@ -36,10 +37,17 @@ const (
 
 var lineNumberRegex = regexp.MustCompile(` \(*([^ ]+):([0-9]+):([0-9]+)\([0-9]+\)`)
 
+type transformCacheKey struct {
+	name string
+	src  string
+}
+
 // VM is a wrapper around the goja runtime.
 type VM struct {
 	*goja.Runtime
 	globalSourceMapCache map[string]*sourcemap.Consumer
+	transformCache       map[transformCacheKey]*esbuild.TransformResult
+	transformCacheMutex  sync.RWMutex
 }
 
 // Options represents options for running a script.
@@ -82,7 +90,11 @@ func New(randSource RandSource) (*VM, error) {
 		})
 	}
 
-	return &VM{Runtime: g, globalSourceMapCache: make(map[string]*sourcemap.Consumer)}, nil
+	return &VM{
+		Runtime:              g,
+		globalSourceMapCache: make(map[string]*sourcemap.Consumer),
+		transformCache:       make(map[transformCacheKey]*esbuild.TransformResult),
+	}, nil
 }
 
 // Run runs a script in the VM.
@@ -181,14 +193,33 @@ func (v *VM) GetRuntime() *goja.Runtime {
 	return v.Runtime
 }
 
-func (v *VM) compile(name string, src string, strict bool) (*program, error) {
-	// transform src with esbuild -- this ensures we handle typescript
+func (v *VM) cachedTransform(name string, src string) *esbuild.TransformResult {
+	key := transformCacheKey{name: name, src: src}
+
+	v.transformCacheMutex.RLock()
+	if cached, ok := v.transformCache[key]; ok {
+		v.transformCacheMutex.RUnlock()
+		return cached
+	}
+	v.transformCacheMutex.RUnlock()
+
 	result := esbuild.Transform(src, esbuild.TransformOptions{
 		Target:     esbuild.ES2015,
 		Loader:     esbuild.LoaderTS,
 		Sourcemap:  esbuild.SourceMapExternal,
 		Sourcefile: name,
 	})
+
+	v.transformCacheMutex.Lock()
+	v.transformCache[key] = &result
+	v.transformCacheMutex.Unlock()
+
+	return &result
+}
+
+func (v *VM) compile(name string, src string, strict bool) (*program, error) {
+	// transform src with esbuild -- this ensures we handle typescript
+	result := v.cachedTransform(name, src)
 	if len(result.Errors) > 0 {
 		msg := ""
 		for _, errMsg := range result.Errors {
