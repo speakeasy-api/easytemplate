@@ -162,3 +162,58 @@ func TestEngine_GoRuntimePanicIncludesStackTrace(t *testing.T) {
 	// Should still be unwrappable to ErrNativePanic.
 	assert.ErrorIs(t, panicErr, easytemplate.ErrNativePanic)
 }
+
+func TestEngine_ContextOutFile(t *testing.T) {
+	// Verifies that context.OutFile is populated during a templateFile render,
+	// restored across nested templateFile calls, and cleared after the
+	// outermost render returns. JS helpers can use it to derive paths
+	// relative to the file currently being templated.
+	var (
+		captured []string
+		eng      *easytemplate.Engine
+	)
+
+	var writes []string
+	eng = easytemplate.New(
+		easytemplate.WithSearchLocations([]string{"./testdata"}),
+		easytemplate.WithWriteFunc(func(outFile string, data []byte) error {
+			writes = append(writes, string(data))
+			return nil
+		}),
+		easytemplate.WithTemplateFuncs(map[string]any{
+			"captureOutFile": func() string {
+				ctx := eng.Runtime().Get("context").ToObject(eng.Runtime())
+				captured = append(captured, ctx.Get("OutFile").String())
+				return ""
+			},
+		}),
+	)
+	e := eng
+
+	require.NoError(t, e.Init(context.Background(), nil))
+
+	// Before any templateFile call, OutFile should be empty.
+	rootCtx := e.Runtime().Get("context").ToObject(e.Runtime())
+	assert.Empty(t, rootCtx.Get("OutFile").String())
+
+	// templateFile sets OutFile for the duration of the render.
+	require.NoError(t, e.TemplateFile(context.Background(),
+		"templates/outfile_outer.stmpl", "out/outer.txt", nil))
+
+	// After return: restored to empty.
+	assert.Empty(t, rootCtx.Get("OutFile").String())
+
+	// During the outer render, OutFile == "out/outer.txt". The outer template
+	// nests a templateFile call that should overwrite to "out/inner.txt"
+	// then restore "out/outer.txt".
+	assert.Equal(t, []string{
+		"out/outer.txt", // top of outer template
+		"out/inner.txt", // top of inner template (nested)
+		"out/outer.txt", // resumed outer template after nested call
+	}, captured)
+
+	// {{.OutFile}} must also resolve inside text/template renders.
+	require.Len(t, writes, 2)
+	assert.Contains(t, writes[1], "tmpl=out/outer.txt") // outer.txt written last
+	assert.Contains(t, writes[0], "tmpl=out/inner.txt") // inner.txt written first
+}

@@ -34,6 +34,7 @@ type Context struct {
 	GlobalComputed    goja.Value
 	LocalComputed     goja.Value
 	RecursiveComputed goja.Value
+	OutFile           string
 }
 
 type tmplContext struct {
@@ -42,6 +43,7 @@ type tmplContext struct {
 	GlobalComputed    any
 	LocalComputed     any
 	RecursiveComputed any
+	OutFile           string
 }
 
 // VM represents a virtual machine that can be used to run js.
@@ -61,6 +63,7 @@ type Templator struct {
 	contextData    any
 	globalComputed goja.Value
 	baseTemplate   *template.Template
+	outFile        string
 }
 
 // RebuildBaseTemplate creates a new base template from the current TmplFuncs.
@@ -78,6 +81,10 @@ func (t *Templator) SetContextData(contextData any, globalComputed goja.Value) {
 
 // TemplateFile will template a file and write the output to outFile.
 func (t *Templator) TemplateFile(ctx context.Context, vm VM, templateFile, outFile string, inputData any) error {
+	lastOutFile := t.outFile
+	t.outFile = outFile
+	defer func() { t.outFile = lastOutFile }()
+
 	output, err := t.TemplateString(ctx, vm, templateFile, inputData)
 	if err != nil {
 		return err
@@ -132,6 +139,11 @@ func (t *Templator) TemplateStringInput(ctx context.Context, vm VM, name string,
 	}
 
 	currentContext := vm.Get("context")
+	defer func() {
+		if resetErr := vm.Set("context", currentContext); resetErr != nil && err == nil {
+			err = fmt.Errorf("failed to reset context: %w", resetErr)
+		}
+	}()
 
 	currentRecursiveComputed := getRecursiveComputedContext(vm)
 	localRecursiveComputed := currentRecursiveComputed
@@ -156,6 +168,7 @@ func (t *Templator) TemplateStringInput(ctx context.Context, vm VM, name string,
 			Local:             inputData,
 			LocalComputed:     localComputed,
 			RecursiveComputed: localRecursiveComputed,
+			OutFile:           t.outFile,
 		}
 
 		if err := vm.Set("context", context); err != nil {
@@ -176,6 +189,7 @@ func (t *Templator) TemplateStringInput(ctx context.Context, vm VM, name string,
 			GlobalComputed:    context.GlobalComputed.Export(),
 			LocalComputed:     localComputed.Export(),
 			RecursiveComputed: localRecursiveComputed.Export(),
+			OutFile:           context.OutFile,
 		}
 
 		out, err = t.execTemplate(name, evaluated, tmplCtx, replacedLines)
@@ -194,11 +208,6 @@ func (t *Templator) TemplateStringInput(ctx context.Context, vm VM, name string,
 			break
 		}
 		localRecursiveComputed = getRecursiveComputedContext(vm)
-	}
-
-	// Reset the context back to the previous one
-	if err := vm.Set("context", currentContext); err != nil {
-		return "", fmt.Errorf("failed to reset context: %w", err)
 	}
 
 	return out, nil

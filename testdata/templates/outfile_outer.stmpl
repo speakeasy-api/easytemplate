@@ -1,0 +1,2 @@
+tmpl={{.OutFile}}
+{{captureOutFile}}{{templateFile "templates/outfile_inner.stmpl" "out/inner.txt" nil}}{{captureOutFile}}
