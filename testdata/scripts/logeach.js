@@ -1,3 +1,3 @@
-_.each(["a", "b", "c"], (v) => {
+["a", "b", "c"].forEach((v) => {
   console.log(v);
 });

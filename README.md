@@ -12,7 +12,6 @@ The module includes a number of features on top of the standard [text/template](
 
 * [x] [Support for JavaScript snippets in templates](#using-javascript).
   * [x] ES5 Support provided by [goja](https://github.com/dop251/goja).
-  * [x] Built-in support for [underscore.js](http://underscorejs.org/).
   * [x] Import JavaScripts scripts from other files and inline JavaScript snippets.
   * [x] Modify the templating context from within JavaScript.
 * [x] [Controlling the flow of templating within the engine](#controlling-the-flow-of-templating).
@@ -324,14 +323,6 @@ require("path/to/file.js");
 ```
 
 Any functions or variables defined in the imported file will be available in the global scope.
-
-### Using Underscore.js
-
-The [underscore.js](http://underscorejs.org/) library is included by default and can be used in your JavaScript snippets/code.
-
-```js
-_.each([1, 2, 3], console.log);
-```
 
 ### Importing External Javascript Libraries
 

@@ -19,7 +19,6 @@ import (
 	esbuild "github.com/evanw/esbuild/pkg/api"
 
 	"github.com/speakeasy-api/easytemplate/internal/utils"
-	"github.com/speakeasy-api/easytemplate/pkg/underscore"
 )
 
 var (
@@ -76,10 +75,6 @@ type program struct {
 // New creates a new VM.
 func New(randSource RandSource) (*VM, error) {
 	g := goja.New()
-	_, err := g.RunString(underscore.JS)
-	if err != nil {
-		return nil, utils.HandleJSError("failed to init underscore", err)
-	}
 
 	new(require.Registry).Enable(g)
 	console.Enable(g)

@@ -1,7 +1,7 @@
 {{.Local.Test}}
 ```sjs
 require("scripts/logeach.js");
-_.each(["z", "x", "y"], (v) => {
+["z", "x", "y"].forEach((v) => {
   console.log(v);
 });
 sjs```
